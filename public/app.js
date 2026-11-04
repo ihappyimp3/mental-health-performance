@@ -257,6 +257,11 @@ document.addEventListener("click", e=>{
   if(act==="up"||act==="down"){ movePlans([...picked], act==="up"?-1:1); return; }
   if(act==="top"||act==="bottom"){ placePlans([...picked], act); return; }
   if(act==="goto"){ gotoPlans(actEl.closest(".copybar")); return; }
+  if(act==="editsel"){ editSelected(); return; }
+  if(act==="delsel"){
+    const n=picked.size, rn=records.filter(r=>picked.has(r.planId)).length;
+    confirmThen(actEl, deleteSelected, `${n}개${rn?` · 실적 ${rn}건`:""} 삭제 확인`); return;
+  }
   if(act==="paste"){ doPaste(actEl.closest(".copybar")); return; }
   if(act==="unpick"){ picked.clear(); copyMsg=""; render(); return; }
   if(act==="openPlans"){ openPlans(); return; }
@@ -383,6 +388,10 @@ function renderCopyBars(){
         <button type="button" data-act="bottom" title="맨 아래로">⤓ 맨 아래</button>
         <input type="number" class="mvPos" id="mvPos${i}" min="1" inputmode="numeric" placeholder="번호" aria-label="이동할 번호" value="${esc(prevPos)}"><button type="button" data-act="goto" title="입력한 번호 위치로 이동">번째로 이동</button>
       </span>
+      <span class="grp" role="group" aria-label="수정과 삭제">
+        <button type="button" data-act="editsel" title="${picked.size===1?"선택한 지표 수정":"선택한 지표를 한꺼번에 수정"}">${picked.size===1?"수정":"한꺼번에 수정"}</button>
+        <button type="button" class="danger" data-act="delsel" title="선택한 지표와 그 실적을 삭제">선택 삭제</button>
+      </span>
       <button class="ghost" type="button" data-act="unpick">선택 해제</button>
       <div class="msg ok">${esc(copyMsg)}</div>` : `<div class="msg ok">${esc(copyMsg)}</div><button class="ghost" type="button" data-act="unpick">닫기</button>`;
   });
@@ -449,6 +458,40 @@ function gotoPlans(bar){
 document.addEventListener("keydown", e=>{
   if(e.key==="Enter" && e.target.matches(".mvPos")){ e.preventDefault(); gotoPlans(e.target.closest(".copybar")); }
 });
+
+/* ---------- 선택한 지표 수정·삭제 ---------- */
+const bulkDlg=$("#bulkDlg");
+bulkDlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.target===bulkDlg) bulkDlg.close(); });
+function editSelected(){
+  const ids=[...picked]; if(!ids.length) return;
+  if(ids.length===1){
+    if(!dlg.open){ resetPlanForm(); renderPlanList(); dlg.showModal(); }
+    startEditPlan(ids[0]); return;
+  }
+  $("#bulkTitle").textContent=`지표 ${ids.length}개 한꺼번에 수정`;
+  $("#bulkForm").reset(); $("#bMsg").textContent=""; bulkDlg.showModal(); $("#bTarget").focus();
+}
+$("#bulkForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const m=$("#bMsg"), patch={}, t=$("#bTarget").value.trim();
+  if(t!==""){ const n=parseFloat(t); if(!(n>=0)){ m.className="msg err"; m.textContent="연간 목표는 0 이상의 숫자로 입력하세요."; return; } patch.target=n; }
+  [["bUnit","unit"],["bOwner","owner"],["bCalc","calc"]].forEach(([id,k])=>{ const v=$("#"+id).value.trim(); if(v!=="") patch[k]=v; });
+  if(!Object.keys(patch).length){ m.className="msg err"; m.textContent="바꿀 항목을 하나 이상 입력하세요."; return; }
+  const btn=$("#bSubmit"); btn.disabled=true;
+  try{
+    const r=await api("POST","/api/plans/update",{ids:[...picked],patch});
+    bulkDlg.close(); copyMsg=`${r.count}개 지표를 수정했습니다.`; await load(); render();
+  }catch(err){ m.className="msg err"; m.textContent="수정하지 못했습니다: "+err.message; }
+  finally{ btn.disabled=false; }
+});
+async function deleteSelected(){
+  const ids=[...picked]; if(!ids.length) return;
+  try{
+    const r=await api("POST","/api/plans/delete",{ids});
+    if(selPlan && ids.includes(selPlan)) selPlan=null;
+    picked.clear(); copyMsg=`${r.count}개 지표를 삭제했습니다.`; await load(); render();
+  }catch(err){ flash("삭제하지 못했습니다: "+err.message,true); }
+}
 
 /* 끌어서 놓기 (표의 ⠿ 손잡이) */
 let dragIds=null;

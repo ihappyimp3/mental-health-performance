@@ -157,6 +157,39 @@ async function api(request, env, url) {
     }
   }
 
+  // POST /api/plans/delete  { ids:[] } — 선택한 지표와 그 실적을 함께 삭제
+  if (parts[0] === "plans" && parts[1] === "delete" && m === "POST") {
+    const ids = cleanIds((await body(request)).ids);
+    if (!ids.length) return json({ error: "삭제할 지표를 선택하세요." }, 400);
+    let count = 0;
+    for (const chunk of chunks(ids, 40)) {
+      const ph = chunk.map(() => "?").join(",");
+      count += (await db.prepare(`SELECT COUNT(*) AS n FROM plans WHERE id IN (${ph})`).bind(...chunk).first()).n;
+      await db.batch([db.prepare(`DELETE FROM records WHERE plan_id IN (${ph})`).bind(...chunk), db.prepare(`DELETE FROM plans WHERE id IN (${ph})`).bind(...chunk)]);
+    }
+    return json({ ok: true, count });
+  }
+
+  // POST /api/plans/update  { ids:[], patch:{ target?, unit?, owner?, calc? } } — 보낸 항목만 바꿈
+  if (parts[0] === "plans" && parts[1] === "update" && m === "POST") {
+    const b = await body(request), pt = b.patch || {}, ids = cleanIds(b.ids), sets = [], vals = [];
+    if (pt.target !== undefined) {
+      const t = Number(pt.target);
+      if (!Number.isFinite(t) || t < 0) return json({ error: "연간 목표는 0 이상의 숫자여야 합니다." }, 400);
+      sets.push("target=?"); vals.push(t);
+    }
+    if (pt.unit !== undefined) { sets.push("unit=?"); vals.push(str(pt.unit, 10)); }
+    if (pt.owner !== undefined) { sets.push("owner=?"); vals.push(str(pt.owner, 30)); }
+    if (pt.calc !== undefined) { sets.push("calc=?"); vals.push(str(pt.calc, 300)); }
+    if (!ids.length || !sets.length) return json({ error: "수정할 지표와 항목을 선택하세요." }, 400);
+    let count = 0;
+    for (const chunk of chunks(ids, 40)) {
+      const r = await db.prepare(`UPDATE plans SET ${sets.join(", ")} WHERE id IN (${chunk.map(() => "?").join(",")})`).bind(...vals, ...chunk).run();
+      count += r.meta.changes;
+    }
+    return json({ ok: true, count });
+  }
+
   // POST /api/plans/reorder  { year, doc, ids:[앞에서부터 새 순서] }
   if (parts[0] === "plans" && parts[1] === "reorder" && m === "POST") {
     const b = await body(request);
@@ -238,6 +271,8 @@ function cleanPlan(b) {
 }
 const planOut = (p) => ({ id: p.id, year: p.year, doc: p.doc, name: p.name, calc: p.calc, owner: p.owner, target: p.target, unit: p.unit, order: p.ord, copiedFrom: p.copied_from });
 const recOut = (r) => ({ id: r.id, planId: r.plan_id, date: r.date, value: r.value, note: r.note, author: r.author, createdAt: r.created_at });
+const cleanIds = (v) => (Array.isArray(v) ? [...new Set(v.slice(0, 500).map(String))] : []);
+function chunks(a, n) { const out = []; for (let i = 0; i < a.length; i += n) out.push(a.slice(i, i + n)); return out; }
 const str = (v, max) => String(v ?? "").trim().slice(0, max);
 const now = () => new Date().toISOString();
 function toYear(v) { const y = Number(v); return Number.isInteger(y) && y >= 2000 && y <= 2100 ? y : null; }

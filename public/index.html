@@ -134,6 +134,23 @@
   </div>
 </dialog>
 
+<dialog id="bulkDlg">
+  <div class="dh"><h2 id="bulkTitle">지표 한꺼번에 수정</h2><button class="ghost" type="button" data-close>닫기</button></div>
+  <div class="db">
+    <p class="hint" style="margin:0">바꿀 항목만 입력하세요. 비워 둔 항목은 그대로 유지됩니다. 지표명은 지표를 하나만 선택했을 때 수정할 수 있습니다.</p>
+    <form id="bulkForm" autocomplete="off" style="display:flex;flex-direction:column;gap:10px">
+      <div class="field-row">
+        <div class="field"><label for="bTarget">연간 목표</label><input id="bTarget" type="number" step="any" min="0" placeholder="변경 안 함"></div>
+        <div class="field"><label for="bUnit">단위</label><input id="bUnit" maxlength="10" placeholder="변경 안 함"></div>
+      </div>
+      <div class="field"><label for="bOwner">담당</label><input id="bOwner" maxlength="30" placeholder="변경 안 함"></div>
+      <div class="field"><label for="bCalc">산출내역</label><textarea id="bCalc" rows="2" maxlength="300" placeholder="변경 안 함"></textarea></div>
+      <div class="msg" id="bMsg" role="status"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button class="primary" type="submit" id="bSubmit">선택한 지표에 적용</button></div>
+    </form>
+  </div>
+</dialog>
+
 <script src="/app.js"></script>
 </body>
 </html>
