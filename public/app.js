@@ -253,6 +253,7 @@ document.addEventListener("click", e=>{
   }
   if(e.target.closest("td.pk")) return;
   const actEl=e.target.closest("[data-act]"), act=actEl?.dataset.act;
+  if(act==="up"||act==="down"){ movePlans([...picked], act==="up"?-1:1); return; }
   if(act==="paste"){ doPaste(actEl.closest(".copybar")); return; }
   if(act==="unpick"){ picked.clear(); copyMsg=""; render(); return; }
   if(act==="openPlans"){ openPlans(); return; }
@@ -269,6 +270,8 @@ document.addEventListener("click", e=>{
       catch(err){ $("#pMsg").className="msg err"; $("#pMsg").textContent="삭제하지 못했습니다: "+err.message; }
     }, n?`실적 ${n}건도 삭제`:"삭제 확인");
   }
+  const mv=e.target.closest("[data-pmove]");
+  if(mv){ const [id,d]=mv.dataset.pmove.split(":"); movePlans([id],+d, mv.dataset.pmove); return; }
   const pedit=e.target.closest("[data-pedit]");
   if(pedit) startEditPlan(pedit.dataset.pedit);
 });
@@ -317,10 +320,10 @@ function renderPlanList(){
   groups.forEach(k=>{
     const ps=all.filter(p=>docOf(p)===k); if(!ps.length) return; n+=ps.length;
     if(curDoc==="all") html+=`<li class="grp">${esc(docName(k))}</li>`;
-    html+=ps.map(p=>`<li><div class="lft"><input type="checkbox" class="pick" id="dpick-${esc(p.id)}" data-pick="${esc(p.id)}" aria-label="${esc(p.name)} 선택"${picked.has(p.id)?" checked":""}><div><div class="pname">${esc(p.name)}</div><div class="pcat">목표 ${fmt(p.target||0)}${esc(p.unit||"")}${p.owner?` · 담당 ${esc(p.owner)}`:""}</div>${p.calc?`<div class="pcat">산출내역: ${esc(p.calc)}</div>`:""}</div></div><div style="display:flex;gap:2px;flex-shrink:0"><button class="ghost" type="button" data-pedit="${esc(p.id)}">수정</button><button class="ghost danger" type="button" data-pdel="${esc(p.id)}">삭제</button></div></li>`).join("");
+    html+=ps.map((p,i)=>`<li><div class="lft"><input type="checkbox" class="pick" id="dpick-${esc(p.id)}" data-pick="${esc(p.id)}" aria-label="${esc(p.name)} 선택"${picked.has(p.id)?" checked":""}><div><div class="pname">${esc(p.name)}</div><div class="pcat">목표 ${fmt(p.target||0)}${esc(p.unit||"")}${p.owner?` · 담당 ${esc(p.owner)}`:""}</div>${p.calc?`<div class="pcat">산출내역: ${esc(p.calc)}</div>`:""}</div></div><div style="display:flex;gap:2px;flex-shrink:0"><button class="ghost mv" type="button" data-pmove="${esc(p.id)}:-1" aria-label="${esc(p.name)} 위로 이동" title="위로"${i===0?" disabled":""}>▲</button><button class="ghost mv" type="button" data-pmove="${esc(p.id)}:1" aria-label="${esc(p.name)} 아래로 이동" title="아래로"${i===ps.length-1?" disabled":""}>▼</button><button class="ghost" type="button" data-pedit="${esc(p.id)}">수정</button><button class="ghost danger" type="button" data-pdel="${esc(p.id)}">삭제</button></div></li>`).join("");
   });
   const scope = curDoc==="all" ? `${year}년 전체 지표` : `${year}년 ${docName(curDoc)} 지표`;
-  w.innerHTML = n ? `<div class="eyebrow">${esc(scope)} (${n})</div><div class="hint">지표를 체크하면 다른 계획서에 붙여넣을 수 있습니다.</div><ul class="planlist">${html}</ul>` : `<div class="hint">${esc(scope)}가 아직 없습니다.</div>`;
+  w.innerHTML = n ? `<div class="eyebrow">${esc(scope)} (${n})</div><div class="hint">▲▼로 순서를 바꾸고, 체크하면 다른 계획서에 붙여넣을 수 있습니다.</div><ul class="planlist">${html}</ul>` : `<div class="hint">${esc(scope)}가 아직 없습니다.</div>`;
   renderCopyBars();
 }
 function resetPlanForm(){
@@ -365,6 +368,8 @@ function renderCopyBars(){
       <select id="cbDoc${i}" class="cbDoc">${targets.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("")}</select>
       <label><input type="checkbox" id="cbRec${i}" class="cbRec"${prevRec?" checked":""}> 기존 실적도 복사</label>
       <button class="primary" type="button" data-act="paste">붙여넣기</button>
+      <button type="button" data-act="up" title="선택한 지표를 한 칸 위로">▲ 위로</button>
+      <button type="button" data-act="down" title="선택한 지표를 한 칸 아래로">▼ 아래로</button>
       <button class="ghost" type="button" data-act="unpick">선택 해제</button>
       <div class="msg ok">${esc(copyMsg)}</div>` : `<div class="msg ok">${esc(copyMsg)}</div><button class="ghost" type="button" data-act="unpick">닫기</button>`;
     if(prevSel && targets.some(d=>d.key===prevSel)) bar.querySelector("select").value=prevSel;
@@ -379,6 +384,30 @@ async function doPaste(bar){
     picked.clear();
     await load();
   }catch(err){ copyMsg="붙여넣지 못했습니다: "+err.message; render(); }
+}
+
+/* ---------- 지표 순서 이동 ---------- */
+let moveChain=Promise.resolve();
+function movePlans(ids, dir, focusKey){
+  const sel=new Set(ids), byDoc={};
+  allYearPlans().filter(p=>sel.has(p.id)).forEach(p=>{ (byDoc[docOf(p)]=byDoc[docOf(p)]||[]).push(p.id); });
+  const jobs=[];
+  Object.keys(byDoc).forEach(doc=>{
+    if(!DOCMAP[doc]) return;
+    const chosen=new Set(byDoc[doc]);
+    const list=allYearPlans().filter(p=>docOf(p)===doc).map(p=>p.id), arr=list.slice();
+    if(dir<0){ for(let i=1;i<arr.length;i++) if(chosen.has(arr[i]) && !chosen.has(arr[i-1])) [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; }
+    else { for(let i=arr.length-2;i>=0;i--) if(chosen.has(arr[i]) && !chosen.has(arr[i+1])) [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; }
+    if(arr.some((x,i)=>x!==list[i])){ arr.forEach((id,i)=>{ const p=plans.find(x=>x.id===id); if(p) p.order=i; }); jobs.push({doc,ids:arr}); }
+  });
+  if(!jobs.length) return;
+  render();
+  if(focusKey){ const b=document.querySelector(`[data-pmove="${CSS.escape(focusKey)}"]`); if(b&&!b.disabled) b.focus(); }
+  moveChain=moveChain.then(async()=>{
+    try{ for(const j of jobs) await api("POST","/api/plans/reorder",{year,doc:j.doc,ids:j.ids}); }
+    catch(err){ flash("순서를 저장하지 못했습니다: "+err.message,true); }
+    await load();
+  });
 }
 
 /* ---------- 시작 ---------- */

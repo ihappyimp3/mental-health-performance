@@ -117,3 +117,22 @@ test("다른 계획서로 복사: 실적 포함, 중복은 건너뜀, 동시 기
   assert.equal((await multi.json()).count, 2);
   assert.equal((await call(env, "/api/plans/copy", { method: "POST", body: { ids: [], doc: "health" }, cookie })).status, 400);
 });
+
+test("지표 순서 바꾸기", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const mk = async (name) => (await (await call(env, "/api/plans", { method: "POST", body: { year: 2026, doc: "youth", name, target: 10 }, cookie })).json()).id;
+  const [a, b, c] = [await mk("가"), await mk("나"), await mk("다")];
+  const names = async () => (await (await call(env, "/api/data?year=2026", { cookie })).json()).plans.map((p) => p.name);
+  assert.deepEqual(await names(), ["가", "나", "다"]);
+  assert.equal((await call(env, "/api/plans/reorder", { method: "POST", body: { year: 2026, doc: "youth", ids: [c, a, b] }, cookie })).status, 200);
+  assert.deepEqual(await names(), ["다", "가", "나"]);
+  // 삭제 뒤 새로 추가해도 맨 뒤에 붙는다
+  await call(env, "/api/plans/" + a, { method: "DELETE", cookie });
+  await mk("라");
+  assert.deepEqual(await names(), ["다", "나", "라"]);
+  // 다른 계획서 지표는 건드리지 않는다
+  assert.equal((await call(env, "/api/plans/reorder", { method: "POST", body: { year: 2026, doc: "main", ids: [b] }, cookie })).status, 200);
+  assert.deepEqual(await names(), ["다", "나", "라"]);
+  assert.equal((await call(env, "/api/plans/reorder", { method: "POST", body: { year: 2026, doc: "zzz", ids: [b] }, cookie })).status, 400);
+});

@@ -134,7 +134,7 @@ async function api(request, env, url) {
     if (!year) return json({ error: "연도가 올바르지 않습니다." }, 400);
     const dup = await db.prepare("SELECT id FROM plans WHERE year=? AND doc=? AND lower(replace(name,' ',''))=lower(replace(?,' ',''))").bind(year, p.doc, p.name).first();
     if (dup) return json({ error: "이 계획서에 같은 이름의 지표가 이미 있습니다." }, 409);
-    const ord = (await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE year=? AND doc=?").bind(year, p.doc).first()).n;
+    const ord = (await db.prepare("SELECT COALESCE(MAX(ord),-1)+1 AS n FROM plans WHERE year=? AND doc=?").bind(year, p.doc).first()).n;
     const id = crypto.randomUUID();
     await db.prepare("INSERT INTO plans (id,year,doc,name,calc,owner,target,unit,ord,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
       .bind(id, year, p.doc, p.name, p.calc, p.owner, p.target, p.unit, ord, now()).run();
@@ -157,6 +157,16 @@ async function api(request, env, url) {
     }
   }
 
+  // POST /api/plans/reorder  { year, doc, ids:[앞에서부터 새 순서] }
+  if (parts[0] === "plans" && parts[1] === "reorder" && m === "POST") {
+    const b = await body(request);
+    const year = toYear(b.year), doc = String(b.doc || "");
+    const ids = Array.isArray(b.ids) ? b.ids.slice(0, 500).map(String) : [];
+    if (!year || !DOC_KEYS.includes(doc) || !ids.length) return json({ error: "순서를 바꿀 수 없습니다." }, 400);
+    await db.batch(ids.map((id, i) => db.prepare("UPDATE plans SET ord=? WHERE id=? AND year=? AND doc=?").bind(i, id, year, doc)));
+    return json({ ok: true });
+  }
+
   // POST /api/plans/copy  { ids:[], doc, withRecords }
   if (parts[0] === "plans" && parts[1] === "copy" && m === "POST") {
     const b = await body(request);
@@ -170,7 +180,7 @@ async function api(request, env, url) {
       if (!src) continue;
       const dup = await db.prepare("SELECT id FROM plans WHERE year=? AND doc=? AND lower(replace(name,' ',''))=lower(replace(?,' ',''))").bind(src.year, doc, src.name).first();
       if (dup) { skipped.push(src.name); continue; }
-      const ord = (await db.prepare("SELECT COUNT(*) AS n FROM plans WHERE year=? AND doc=?").bind(src.year, doc).first()).n;
+      const ord = (await db.prepare("SELECT COALESCE(MAX(ord),-1)+1 AS n FROM plans WHERE year=? AND doc=?").bind(src.year, doc).first()).n;
       const nid = crypto.randomUUID();
       const stmts = [db.prepare("INSERT INTO plans (id,year,doc,name,calc,owner,target,unit,ord,copied_from,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
         .bind(nid, src.year, doc, src.name, src.calc, src.owner, src.target, src.unit, ord, src.id, now())];
