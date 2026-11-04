@@ -178,13 +178,14 @@ async function api(request, env, url) {
     for (const id of ids) {
       const src = await db.prepare("SELECT * FROM plans WHERE id=?").bind(id).first();
       if (!src) continue;
-      const dup = await db.prepare("SELECT id FROM plans WHERE year=? AND doc=? AND lower(replace(name,' ',''))=lower(replace(?,' ',''))").bind(src.year, doc, src.name).first();
+      const year = toYear(b.year) || src.year; // 붙여넣을 연도(없으면 원래 연도)
+      const dup = await db.prepare("SELECT id FROM plans WHERE year=? AND doc=? AND lower(replace(name,' ',''))=lower(replace(?,' ',''))").bind(year, doc, src.name).first();
       if (dup) { skipped.push(src.name); continue; }
-      const ord = (await db.prepare("SELECT COALESCE(MAX(ord),-1)+1 AS n FROM plans WHERE year=? AND doc=?").bind(src.year, doc).first()).n;
+      const ord = (await db.prepare("SELECT COALESCE(MAX(ord),-1)+1 AS n FROM plans WHERE year=? AND doc=?").bind(year, doc).first()).n;
       const nid = crypto.randomUUID();
       const stmts = [db.prepare("INSERT INTO plans (id,year,doc,name,calc,owner,target,unit,ord,copied_from,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(nid, src.year, doc, src.name, src.calc, src.owner, src.target, src.unit, ord, src.id, now())];
-      if (b.withRecords) {
+        .bind(nid, year, doc, src.name, src.calc, src.owner, src.target, src.unit, ord, src.id, now())];
+      if (b.withRecords && year === src.year) { // 다른 연도로는 실적(날짜)을 복사하지 않는다
         const rs = await db.prepare("SELECT * FROM records WHERE plan_id=?").bind(src.id).all();
         for (const r of rs.results) {
           stmts.push(db.prepare("INSERT INTO records (id,plan_id,date,value,note,author,created_at) VALUES (?,?,?,?,?,?,?)")

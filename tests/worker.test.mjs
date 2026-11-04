@@ -136,3 +136,24 @@ test("지표 순서 바꾸기", async () => {
   assert.deepEqual(await names(), ["다", "나", "라"]);
   assert.equal((await call(env, "/api/plans/reorder", { method: "POST", body: { year: 2026, doc: "zzz", ids: [b] }, cookie })).status, 400);
 });
+
+test("다른 연도로 지표 복사: 같은 계획서도 가능, 실적은 복사하지 않음", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const id = (await (await call(env, "/api/plans", { method: "POST", body: { year: 2026, doc: "child", name: "아동 상담", calc: "산출식", target: 40, unit: "건" }, cookie })).json()).id;
+  await call(env, "/api/records", { method: "POST", body: { planIds: [id], date: "2026-05-01", value: 9 }, cookie });
+
+  const copy = (b) => call(env, "/api/plans/copy", { method: "POST", body: b, cookie }).then((r) => r.json());
+  const r1 = await copy({ ids: [id], doc: "child", year: 2027, withRecords: true });
+  assert.equal(r1.added, 1); assert.equal(r1.records, 0);
+  const d27 = await (await call(env, "/api/data?year=2027", { cookie })).json();
+  assert.equal(d27.plans.length, 1); assert.equal(d27.plans[0].calc, "산출식"); assert.equal(d27.plans[0].target, 40);
+  assert.equal(d27.records.length, 0);
+  // 같은 연도·같은 계획서로 다시 복사하면 건너뜀, 이미 있는 연도로 다시 복사해도 건너뜀
+  assert.deepEqual((await copy({ ids: [id], doc: "child", year: 2027 })).skipped, ["아동 상담"]);
+  assert.deepEqual((await copy({ ids: [id], doc: "child", year: 2026 })).skipped, ["아동 상담"]);
+  // 연도를 안 보내면 원래 연도 유지(기존 동작)
+  assert.equal((await copy({ ids: [id], doc: "youth", withRecords: true })).records, 1);
+  // 2026 원본은 그대로
+  assert.equal((await (await call(env, "/api/data?year=2026", { cookie })).json()).plans.length, 2);
+});

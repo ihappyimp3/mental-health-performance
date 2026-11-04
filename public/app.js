@@ -23,7 +23,7 @@ let year = (()=>{ const y=+(store.get("mh_year")||0); return y>=2025&&y<=2030 ? 
 let curDoc = "all";
 let selPlan = null, logMonth = "all", editingPlan = null;
 const picked = new Set();
-let copyMsg = "";
+let copyMsg = "", pasteYear = null, pasteDoc = null;
 let loaded = false, lastSync = null;
 
 /* ---------- 서버 통신 ---------- */
@@ -64,7 +64,7 @@ function fillYears(){
   const ys = new Set([2025,2026,2027,2028,2029,2030, ...knownYears, year]);
   $("#yearSel").innerHTML = [...ys].sort().map(y=>`<option value="${y}"${y===year?" selected":""}>${y}년</option>`).join("");
 }
-$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; render(); load(); });
+$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); pasteYear=null; selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; render(); load(); });
 
 function elapsedRate(y){
   const ty=today.getFullYear();
@@ -361,15 +361,20 @@ function renderCopyBars(){
   const valid=new Set(allYearPlans().map(p=>p.id));
   [...picked].forEach(id=>{ if(!valid.has(id)) picked.delete(id); });
   const srcDocs=new Set([...picked].map(id=>docOf(plans.find(p=>p.id===id))));
-  const targets=DOCS.filter(d=>!(srcDocs.size===1 && srcDocs.has(d.key)));
+  const ty = pasteYear ?? year;
+  const targets=DOCS.filter(d=>!(ty===year && srcDocs.size===1 && srcDocs.has(d.key))); // 같은 연도에서는 원래 계획서를 뺀다
+  const yearOpts=[...new Set([2025,2026,2027,2028,2029,2030,...knownYears,year])].sort();
+  if(!targets.some(d=>d.key===pasteDoc)) pasteDoc=targets[0]?.key||null;
   document.querySelectorAll(".copybar").forEach((bar,i)=>{
     if(!picked.size && !copyMsg){ bar.hidden=true; bar.innerHTML=""; return; }
     bar.hidden=false;
-    const prevSel=bar.querySelector("select")?.value, prevRec=bar.querySelector(".cbRec")?.checked, prevPos=bar.querySelector(".mvPos")?.value||"";
+    const prevRec=bar.querySelector(".cbRec")?.checked, prevPos=bar.querySelector(".mvPos")?.value||"";
     bar.innerHTML = picked.size ? `<span class="cnt">${picked.size}개 지표 선택</span>
-      <label for="cbDoc${i}">붙여넣을 계획서</label>
-      <select id="cbDoc${i}" class="cbDoc">${targets.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("")}</select>
-      <label><input type="checkbox" id="cbRec${i}" class="cbRec"${prevRec?" checked":""}> 기존 실적도 복사</label>
+      <label for="cbYear${i}">붙여넣을 연도</label>
+      <select id="cbYear${i}" class="cbYear">${yearOpts.map(y=>`<option value="${y}"${y===ty?" selected":""}>${y}년</option>`).join("")}</select>
+      <label for="cbDoc${i}">계획서</label>
+      <select id="cbDoc${i}" class="cbDoc">${targets.map(d=>`<option value="${d.key}"${d.key===pasteDoc?" selected":""}>${esc(d.name)}</option>`).join("")}</select>
+      <label title="${ty!==year?"다른 연도로는 실적을 복사하지 않습니다":""}"><input type="checkbox" id="cbRec${i}" class="cbRec"${prevRec&&ty===year?" checked":""}${ty!==year?" disabled":""}> 기존 실적도 복사${ty!==year?" (같은 연도만)":""}</label>
       <button class="primary" type="button" data-act="paste">붙여넣기</button>
       <span class="grp" role="group" aria-label="순서 이동">
         <button type="button" data-act="top" title="맨 위로">⤒ 맨 위</button>
@@ -380,15 +385,14 @@ function renderCopyBars(){
       </span>
       <button class="ghost" type="button" data-act="unpick">선택 해제</button>
       <div class="msg ok">${esc(copyMsg)}</div>` : `<div class="msg ok">${esc(copyMsg)}</div><button class="ghost" type="button" data-act="unpick">닫기</button>`;
-    if(prevSel && targets.some(d=>d.key===prevSel)) bar.querySelector("select").value=prevSel;
   });
 }
 async function doPaste(bar){
-  const target=bar.querySelector(".cbDoc").value, withRecords=bar.querySelector(".cbRec").checked;
+  const target=bar.querySelector(".cbDoc").value, ty=+bar.querySelector(".cbYear").value, withRecords=bar.querySelector(".cbRec").checked && ty===year;
   bar.querySelector('[data-act="paste"]').disabled=true;
   try{
-    const r=await api("POST","/api/plans/copy",{ids:[...picked],doc:target,withRecords});
-    copyMsg=`${docName(target)}에 ${r.added}개 붙여넣었습니다${r.records?` (실적 ${r.records}건 포함)`:""}.${r.skipped.length?` 이미 있는 지표 ${r.skipped.length}개는 건너뜀: ${r.skipped.join(", ")}`:""} 목표치가 다르면 해당 탭에서 수정하세요.`;
+    const r=await api("POST","/api/plans/copy",{ids:[...picked],doc:target,year:ty,withRecords});
+    copyMsg=`${ty}년 ${docName(target)}에 ${r.added}개 붙여넣었습니다${r.records?` (실적 ${r.records}건 포함)`:""}.${r.skipped.length?` 이미 있는 지표 ${r.skipped.length}개는 건너뜀: ${r.skipped.join(", ")}`:""} 목표치가 다르면 해당 탭에서 수정하세요.${ty!==year&&r.added?` 위쪽 연도를 ${ty}년으로 바꾸면 볼 수 있습니다.`:""}`;
     picked.clear();
     await load();
   }catch(err){ copyMsg="붙여넣지 못했습니다: "+err.message; render(); }
@@ -477,6 +481,11 @@ document.addEventListener("drop", e=>{
   commitOrder([{doc, ids:[...rest.slice(0,at), ...mine, ...rest.slice(at)]}]);
 });
 document.addEventListener("dragend", ()=>{ clearDrop(); dragIds=null; });
+
+document.addEventListener("change", e=>{
+  if(e.target.matches(".cbYear")){ pasteYear=+e.target.value; copyMsg=""; renderCopyBars(); }
+  else if(e.target.matches(".cbDoc")){ pasteDoc=e.target.value; renderCopyBars(); }
+});
 
 /* ---------- 시작 ---------- */
 render();
