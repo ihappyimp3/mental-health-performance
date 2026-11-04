@@ -151,3 +151,9 @@ img{max-width:100%}
 .sync{font-size:.78rem;color:var(--muted)}
 .mv{padding:4px 8px;font-size:.8rem}
 .mv:disabled{opacity:.3}
+.copybar .grp{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+.copybar .mvPos{width:5.2em;padding:6px 8px}
+td.dh,th.dh{width:26px;padding-left:10px;padding-right:0;color:var(--muted);cursor:grab;user-select:none;text-align:center}
+td.dh:active{cursor:grabbing}
+tr.row.drop-before td{box-shadow:inset 0 2px 0 var(--accent)}
+tr.row.drop-after td{box-shadow:inset 0 -2px 0 var(--accent)}

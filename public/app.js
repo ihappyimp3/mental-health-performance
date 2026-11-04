@@ -19,7 +19,7 @@ const todayStr = today.getFullYear()+"-"+pad(today.getMonth()+1)+"-"+pad(today.g
 const store = { get:k=>{ try{ return localStorage.getItem(k); }catch(_){ return null; } }, set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch(_){} } };
 
 let plans=[], records=[], knownYears=[];
-let year = today.getFullYear();
+let year = (()=>{ const y=+(store.get("mh_year")||0); return y>=2025&&y<=2030 ? y : today.getFullYear(); })();
 let curDoc = "all";
 let selPlan = null, logMonth = "all", editingPlan = null;
 const picked = new Set();
@@ -64,7 +64,7 @@ function fillYears(){
   const ys = new Set([2025,2026,2027,2028,2029,2030, ...knownYears, year]);
   $("#yearSel").innerHTML = [...ys].sort().map(y=>`<option value="${y}"${y===year?" selected":""}>${y}년</option>`).join("");
 }
-$("#yearSel").addEventListener("change", e => { year=+e.target.value; selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; render(); load(); });
+$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; render(); load(); });
 
 function elapsedRate(y){
   const ty=today.getFullYear();
@@ -154,9 +154,10 @@ function render(){
       tw.innerHTML=`<div class="empty"><strong>${year}년 ${esc(docName(curDoc))} 지표가 아직 없습니다.</strong><span>계획서에 있는 성과지표와 연간 목표를 등록하면 날짜별 실적을 입력할 수 있어요.</span><button class="primary" type="button" data-act="openPlans">지표 추가</button></div>`;
     } else {
       const allPicked = ps.every(p=>picked.has(p.id));
-      tw.innerHTML=`<table><thead><tr><th class="pk"><input type="checkbox" class="pick" id="pickAll" data-pickall aria-label="이 계획서 지표 모두 선택"${allPicked?" checked":""}></th><th>지표명</th><th class="r">연간 목표</th><th class="r">최근 실적</th><th>달성률</th><th class="r"></th><th>상태</th></tr></thead><tbody>${
+      tw.innerHTML=`<table><thead><tr><th class="dh" aria-label="순서"></th><th class="pk"><input type="checkbox" class="pick" id="pickAll" data-pickall aria-label="이 계획서 지표 모두 선택"${allPicked?" checked":""}></th><th>지표명</th><th class="r">연간 목표</th><th class="r">최근 실적</th><th>달성률</th><th class="r"></th><th>상태</th></tr></thead><tbody>${
         ps.map((p,i)=>{ const r=rates[i], [cls,lab]=status(r,el,!!last[p.id]);
           return `<tr class="row${selPlan===p.id?" sel":""}" data-plan="${esc(p.id)}" tabindex="0" title="이 지표의 실적만 보기">
+            <td class="dh" draggable="true" title="끌어서 순서 바꾸기" aria-hidden="true">⠿</td>
             <td class="pk"><input type="checkbox" class="pick" id="pick-${esc(p.id)}" data-pick="${esc(p.id)}" aria-label="${esc(p.name)} 선택"${picked.has(p.id)?" checked":""}></td>
             <td><div class="pname">${esc(p.name)}</div>${p.calc?`<div class="pcat">산출내역: ${esc(p.calc)}</div>`:""}</td>
             <td class="r num">${fmt(p.target||0)} <span class="muted">${esc(p.unit||"")}</span></td>
@@ -254,6 +255,8 @@ document.addEventListener("click", e=>{
   if(e.target.closest("td.pk")) return;
   const actEl=e.target.closest("[data-act]"), act=actEl?.dataset.act;
   if(act==="up"||act==="down"){ movePlans([...picked], act==="up"?-1:1); return; }
+  if(act==="top"||act==="bottom"){ placePlans([...picked], act); return; }
+  if(act==="goto"){ gotoPlans(actEl.closest(".copybar")); return; }
   if(act==="paste"){ doPaste(actEl.closest(".copybar")); return; }
   if(act==="unpick"){ picked.clear(); copyMsg=""; render(); return; }
   if(act==="openPlans"){ openPlans(); return; }
@@ -362,14 +365,19 @@ function renderCopyBars(){
   document.querySelectorAll(".copybar").forEach((bar,i)=>{
     if(!picked.size && !copyMsg){ bar.hidden=true; bar.innerHTML=""; return; }
     bar.hidden=false;
-    const prevSel=bar.querySelector("select")?.value, prevRec=bar.querySelector("input[type=checkbox]")?.checked;
+    const prevSel=bar.querySelector("select")?.value, prevRec=bar.querySelector(".cbRec")?.checked, prevPos=bar.querySelector(".mvPos")?.value||"";
     bar.innerHTML = picked.size ? `<span class="cnt">${picked.size}개 지표 선택</span>
       <label for="cbDoc${i}">붙여넣을 계획서</label>
       <select id="cbDoc${i}" class="cbDoc">${targets.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("")}</select>
       <label><input type="checkbox" id="cbRec${i}" class="cbRec"${prevRec?" checked":""}> 기존 실적도 복사</label>
       <button class="primary" type="button" data-act="paste">붙여넣기</button>
-      <button type="button" data-act="up" title="선택한 지표를 한 칸 위로">▲ 위로</button>
-      <button type="button" data-act="down" title="선택한 지표를 한 칸 아래로">▼ 아래로</button>
+      <span class="grp" role="group" aria-label="순서 이동">
+        <button type="button" data-act="top" title="맨 위로">⤒ 맨 위</button>
+        <button type="button" data-act="up" title="한 칸 위로">▲ 위로</button>
+        <button type="button" data-act="down" title="한 칸 아래로">▼ 아래로</button>
+        <button type="button" data-act="bottom" title="맨 아래로">⤓ 맨 아래</button>
+        <input type="number" class="mvPos" id="mvPos${i}" min="1" inputmode="numeric" placeholder="번호" aria-label="이동할 번호" value="${esc(prevPos)}"><button type="button" data-act="goto" title="입력한 번호 위치로 이동">번째로 이동</button>
+      </span>
       <button class="ghost" type="button" data-act="unpick">선택 해제</button>
       <div class="msg ok">${esc(copyMsg)}</div>` : `<div class="msg ok">${esc(copyMsg)}</div><button class="ghost" type="button" data-act="unpick">닫기</button>`;
     if(prevSel && targets.some(d=>d.key===prevSel)) bar.querySelector("select").value=prevSel;
@@ -388,19 +396,17 @@ async function doPaste(bar){
 
 /* ---------- 지표 순서 이동 ---------- */
 let moveChain=Promise.resolve();
-function movePlans(ids, dir, focusKey){
-  const sel=new Set(ids), byDoc={};
-  allYearPlans().filter(p=>sel.has(p.id)).forEach(p=>{ (byDoc[docOf(p)]=byDoc[docOf(p)]||[]).push(p.id); });
-  const jobs=[];
-  Object.keys(byDoc).forEach(doc=>{
-    if(!DOCMAP[doc]) return;
-    const chosen=new Set(byDoc[doc]);
-    const list=allYearPlans().filter(p=>docOf(p)===doc).map(p=>p.id), arr=list.slice();
-    if(dir<0){ for(let i=1;i<arr.length;i++) if(chosen.has(arr[i]) && !chosen.has(arr[i-1])) [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; }
-    else { for(let i=arr.length-2;i>=0;i--) if(chosen.has(arr[i]) && !chosen.has(arr[i+1])) [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; }
-    if(arr.some((x,i)=>x!==list[i])){ arr.forEach((id,i)=>{ const p=plans.find(x=>x.id===id); if(p) p.order=i; }); jobs.push({doc,ids:arr}); }
-  });
+const docList = doc => allYearPlans().filter(p=>docOf(p)===doc).map(p=>p.id);
+function groupByDoc(ids){
+  const sel=new Set(ids), by={};
+  allYearPlans().filter(p=>sel.has(p.id)).forEach(p=>{ (by[docOf(p)]=by[docOf(p)]||[]).push(p.id); });
+  return by;
+}
+// jobs: [{doc, ids:[새 순서 전체]}] — 화면에 먼저 반영하고 서버에는 순서대로 저장한다.
+function commitOrder(jobs, focusKey){
+  jobs=jobs.filter(j=>DOCMAP[j.doc] && j.ids.some((x,i)=>x!==docList(j.doc)[i]));
   if(!jobs.length) return;
+  jobs.forEach(j=>j.ids.forEach((id,i)=>{ const p=plans.find(x=>x.id===id); if(p) p.order=i; }));
   render();
   if(focusKey){ const b=document.querySelector(`[data-pmove="${CSS.escape(focusKey)}"]`); if(b&&!b.disabled) b.focus(); }
   moveChain=moveChain.then(async()=>{
@@ -409,6 +415,68 @@ function movePlans(ids, dir, focusKey){
     await load();
   });
 }
+// 한 칸씩 위(-1)/아래(+1)
+function movePlans(ids, dir, focusKey){
+  const by=groupByDoc(ids), jobs=[];
+  Object.keys(by).forEach(doc=>{
+    const chosen=new Set(by[doc]), arr=docList(doc);
+    if(dir<0){ for(let i=1;i<arr.length;i++) if(chosen.has(arr[i]) && !chosen.has(arr[i-1])) [arr[i-1],arr[i]]=[arr[i],arr[i-1]]; }
+    else { for(let i=arr.length-2;i>=0;i--) if(chosen.has(arr[i]) && !chosen.has(arr[i+1])) [arr[i+1],arr[i]]=[arr[i],arr[i+1]]; }
+    jobs.push({doc,ids:arr});
+  });
+  commitOrder(jobs, focusKey);
+}
+// 선택한 지표를 맨 위/맨 아래/n번째(1부터)로. 선택한 것끼리의 순서는 유지한다.
+function placePlans(ids, where, n){
+  const by=groupByDoc(ids), jobs=[];
+  Object.keys(by).forEach(doc=>{
+    const chosen=new Set(by[doc]), list=docList(doc);
+    const mine=list.filter(id=>chosen.has(id)), rest=list.filter(id=>!chosen.has(id));
+    const at = where==="top" ? 0 : where==="bottom" ? rest.length : Math.min(Math.max((n|0)-1,0), rest.length);
+    jobs.push({doc, ids:[...rest.slice(0,at), ...mine, ...rest.slice(at)]});
+  });
+  commitOrder(jobs);
+}
+function gotoPlans(bar){
+  const n=parseInt(bar.querySelector(".mvPos").value,10);
+  if(!(n>=1)){ flash("이동할 번호를 1 이상의 숫자로 입력하세요.",true); return; }
+  $("#banner").hidden=true; placePlans([...picked],"index",n);
+}
+document.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && e.target.matches(".mvPos")){ e.preventDefault(); gotoPlans(e.target.closest(".copybar")); }
+});
+
+/* 끌어서 놓기 (표의 ⠿ 손잡이) */
+let dragIds=null;
+const clearDrop=()=>document.querySelectorAll(".drop-before,.drop-after").forEach(el=>el.classList.remove("drop-before","drop-after"));
+document.addEventListener("dragstart", e=>{
+  const h=e.target.closest?.("td.dh"); if(!h){ return; }
+  const tr=h.closest("tr.row"), id=tr.dataset.plan;
+  dragIds = picked.has(id) ? [...picked] : [id];
+  e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain", id);
+  try{ e.dataTransfer.setDragImage(tr, 16, 16); }catch(_){}
+});
+document.addEventListener("dragover", e=>{
+  if(!dragIds) return;
+  const tr=e.target.closest?.("tr.row"); if(!tr) return;
+  e.preventDefault(); e.dataTransfer.dropEffect="move";
+  const r=tr.getBoundingClientRect(), after=e.clientY>r.top+r.height/2;
+  clearDrop(); tr.classList.add(after?"drop-after":"drop-before");
+});
+document.addEventListener("drop", e=>{
+  if(!dragIds) return;
+  const tr=e.target.closest?.("tr.row"); if(!tr) return;
+  e.preventDefault();
+  const r=tr.getBoundingClientRect(), after=e.clientY>r.top+r.height/2, targetId=tr.dataset.plan;
+  const target=plans.find(p=>p.id===targetId), doc=docOf(target);
+  const chosen=new Set(dragIds.filter(id=>docOf(plans.find(p=>p.id===id))===doc && id!==targetId));
+  const list=docList(doc), mine=list.filter(id=>chosen.has(id));
+  if(!mine.length){ clearDrop(); dragIds=null; return; }
+  const rest=list.filter(id=>!chosen.has(id)), at=rest.indexOf(targetId)+(after?1:0);
+  clearDrop(); dragIds=null;
+  commitOrder([{doc, ids:[...rest.slice(0,at), ...mine, ...rest.slice(at)]}]);
+});
+document.addEventListener("dragend", ()=>{ clearDrop(); dragIds=null; });
 
 /* ---------- 시작 ---------- */
 render();
