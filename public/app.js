@@ -230,8 +230,8 @@ function updateUnit(){
   $("#linkWrap").hidden = !sib.length;
   if(sib.length) $("#linkText").textContent = `같은 지표가 ${sib.map(x=>docName(docOf(x))).join(", ")}에도 있습니다. 같은 실적을 함께 기록`;
 }
-$("#fDoc").addEventListener("change", ()=>fillPlanSelect());
-$("#fPlan").addEventListener("change", updateUnit);
+$("#fDoc").addEventListener("change", ()=>{ $("#fLink").checked=false; fillPlanSelect(); });
+$("#fPlan").addEventListener("change", ()=>{ $("#fLink").checked=false; updateUnit(); });
 $("#logMonth").addEventListener("change", e=>{ logMonth=e.target.value; render(); });
 $("#logSort").value=logSort;
 $("#logSort").addEventListener("change", e=>{ logSort=e.target.value; store.set("mh_logsort", logSort); render(); });
