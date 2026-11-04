@@ -129,6 +129,11 @@ function render(){
   const curM = year===today.getFullYear()? today.getMonth()+1 : null;
   $("#sMonth").textContent = curM ? fmt(rs.filter(r=>+r.date.slice(5,7)===curM).length)+"건" : "–";
   $("#sMonthD").textContent = curM ? `${curM}월 실적 기록 건수` : "올해에만 표시됩니다";
+  const cnt={done:0,bad:0}; ps.forEach(p=>{ const [c]=status(rateOf(p,totals),el,!!last[p.id]); if(c in cnt) cnt[c]++; });
+  $("#sBad").textContent = ps.length ? `${cnt.bad}개` : "–";
+  $("#sBadD").textContent = ps.length ? `전체 ${ps.length}개 중 · 경과율의 80% 미만` : "지표를 등록하면 표시됩니다";
+  $("#sDone").textContent = ps.length ? `${cnt.done}개` : "–";
+  $("#sDoneD").textContent = ps.length ? `전체 ${ps.length}개 중 · 연간 목표 100% 이상` : "지표를 등록하면 표시됩니다";
   $("#asof").textContent = loaded ? `지표 ${all.length}개 · 실적 ${fmt(rsAll.length)}건` : "불러오는 중…";
   $("#sync").textContent = lastSync ? `· ${pad(lastSync.getHours())}:${pad(lastSync.getMinutes())} 갱신 (30초마다 자동)` : "";
 
