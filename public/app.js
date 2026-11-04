@@ -208,20 +208,28 @@ function render(){
 }
 
 /* ---------- 입력 폼 ---------- */
+// 입력 폼의 계획서·지표 선택은 사용자가 고른 값을 유지한다.
+// 탭 이동(curDoc)이나 표에서 지표 선택(selPlan)이 "바뀐 때만" 그 값으로 맞추고,
+// 30초 자동 갱신·다른 클릭으로 다시 그릴 때는 건드리지 않는다.
+let formSync="";
+function setOptions(sel, html){ if(sel.dataset.sig===html) return; sel.innerHTML=html; sel.dataset.sig=html; }
 function renderForm(all){
   const fd=$("#fDoc"), prevDoc=fd.value;
   const docsWith=DOCS.filter(d=>all.some(p=>docOf(p)===d.key));
-  fd.innerHTML = docsWith.length ? docsWith.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("") : `<option value="">먼저 지표를 등록하세요</option>`;
-  if(curDoc!=="all" && docsWith.some(d=>d.key===curDoc)) fd.value=curDoc;
+  setOptions(fd, docsWith.length ? docsWith.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("") : `<option value="">먼저 지표를 등록하세요</option>`);
+  const key=curDoc+"|"+(selPlan||""), changed=key!==formSync; formSync=key;
+  const sp=selPlan&&all.find(p=>p.id===selPlan);
+  if(changed && sp && docsWith.some(d=>d.key===docOf(sp))) fd.value=docOf(sp);
+  else if(changed && curDoc!=="all" && docsWith.some(d=>d.key===curDoc)) fd.value=curDoc;
   else if(docsWith.some(d=>d.key===prevDoc)) fd.value=prevDoc;
-  fillPlanSelect(all);
+  fillPlanSelect(all, changed);
   if(!$("#fDate").value) $("#fDate").value = year===today.getFullYear()? todayStr : `${year}-01-01`;
 }
-function fillPlanSelect(all=allYearPlans()){
+function fillPlanSelect(all=allYearPlans(), applySel=false){
   const fp=$("#fPlan"), prev=fp.value, d=$("#fDoc").value;
   const opts=all.filter(p=>docOf(p)===d);
-  fp.innerHTML = opts.length ? opts.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("") : `<option value="">지표 없음</option>`;
-  if(selPlan && opts.some(p=>p.id===selPlan)) fp.value=selPlan; else if(opts.some(p=>p.id===prev)) fp.value=prev;
+  setOptions(fp, opts.length ? opts.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("") : `<option value="">지표 없음</option>`);
+  if(applySel && selPlan && opts.some(p=>p.id===selPlan)) fp.value=selPlan; else if(opts.some(p=>p.id===prev)) fp.value=prev;
   $("#fSubmit").disabled = !opts.length;
   updateUnit();
 }
