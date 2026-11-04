@@ -32,7 +32,7 @@ npm run dev     # 로컬 D1로 http://localhost:8787
 
 ## 구조
 
-- `worker/index.js` 로그인, 보안 헤더, API (`/api/data`, `/api/plans`, `/api/plans/copy`, `/api/docs`, `/api/events`, `/api/records`)
+- `worker/index.js` 로그인, 보안 헤더, API (`/api/data`, `/api/plans`, `/api/plans/copy`, `/api/docs`, `/api/events`, `/api/notices`, `/api/records`)
 - `public/` 화면 (`index.html`, `app.js`, `app.css`, 로그인용 `login.js`, `login.css`)
 - `migrations/` D1 스키마
 - `tests/` Worker 테스트

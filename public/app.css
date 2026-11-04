@@ -197,3 +197,24 @@ td.act .ghost{padding:4px 8px}
 .rectbl th.r,.rectbl td.r{text-align:right}
 .rectbl .mono{font-family:var(--mono);white-space:nowrap}
 .rectbl .recnote{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere;min-width:120px}
+
+/* 공지사항 */
+#noticePanel{margin-bottom:16px}
+#noticePanel .cnt{font-family:var(--mono);font-size:.72rem;background:var(--surface-2);color:var(--muted);border-radius:999px;padding:0 7px;font-weight:500;vertical-align:2px}
+.nbar{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.ntbl td,.ntbl th{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.ntbl th.c,.ntbl td.c{text-align:center;white-space:nowrap}
+.ntbl .ttl{width:100%}
+.ntbl .ttl button{all:unset;cursor:pointer;font-weight:600;color:var(--fg);overflow-wrap:anywhere}
+.ntbl .ttl button:hover{text-decoration:underline;color:var(--accent)}
+.ntbl tr.pin{background:var(--accent-soft)}
+.pinmark{display:inline-block;font-size:.7rem;font-weight:700;color:var(--bg);background:var(--accent);border-radius:4px;padding:0 6px;margin-right:6px;vertical-align:1px}
+.ndetail h3{margin:0 0 8px;font-size:1.15rem;overflow-wrap:anywhere}
+.nmeta{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 16px;font-size:.84rem;color:var(--muted);padding-bottom:10px;border-bottom:1px solid var(--line)}
+.nmeta b{color:var(--fg);font-weight:600}
+.ncontent{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px 2px;min-height:80px;line-height:1.7}
+.nfiles{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px;font-size:.88rem}
+.nfiles .fl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nfiles button.dl{color:var(--accent);border-color:var(--line);padding:3px 10px}
+.nform{display:flex;flex-direction:column;gap:10px}
+.pinbtn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}

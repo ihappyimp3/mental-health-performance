@@ -285,3 +285,51 @@ test("일정: 팀명·시작/종료일", async () => {
   assert.equal(nov[0].team, "자살팀"); assert.equal(nov[0].endDate, "2026-11-03"); assert.equal(nov[1].endDate, "");
   assert.equal((await list("2026-11-04", "2026-11-30")).length, 1);
 });
+
+test("공지사항: 등록·고정·조회수·수정·첨부·삭제", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const c = (path, method, body) => call(env, path, { method, body, cookie });
+  assert.equal((await c("/api/notices", "POST", { title: "  " })).status, 400);
+  const a = await (await c("/api/notices", "POST", { title: "첫 공지", author: "홍길동", content: "내용입니다" })).json();
+  const b = await (await c("/api/notices", "POST", { title: "고정 공지", pinned: true })).json();
+  const d = await (await c("/api/notices", "POST", { title: "세번째" })).json();
+  let list = (await (await c("/api/notices", "GET")).json()).notices;
+  assert.equal(list[0].id, b.id); assert.equal(list[0].pinned, true); // 고정 글이 맨 위
+  assert.equal(list[1].id, d.id); // 나머지는 최신순
+  // 조회수: 상세 조회 때만 증가, count=0은 증가 안 함
+  let det = (await (await c("/api/notices/" + a.id, "GET")).json()).notice;
+  await c("/api/notices/" + a.id, "GET"); await c("/api/notices/" + a.id + "?count=0", "GET");
+  det = (await (await c("/api/notices/" + a.id + "?count=0", "GET")).json()).notice;
+  assert.equal(det.views, 2); assert.equal(det.content, "내용입니다"); assert.equal(det.author, "홍길동");
+  assert.equal(det.updatedAt, det.createdAt);
+  // 수정
+  assert.equal((await c("/api/notices/" + a.id, "PUT", { title: "수정된 공지", author: "김철수", content: "새 내용", pinned: true })).status, 200);
+  det = (await (await c("/api/notices/" + a.id + "?count=0", "GET")).json()).notice;
+  assert.equal(det.title, "수정된 공지"); assert.equal(det.pinned, true); assert.ok(det.updatedAt >= det.createdAt);
+  assert.equal((await c("/api/notices/nope", "PUT", { title: "x" })).status, 404);
+  assert.equal((await c("/api/notices/nope?count=0", "GET")).status, 404);
+  // 첨부파일
+  const up = await c(`/api/notices/${a.id}/files`, "POST", { name: "계획/서.pdf", type: "application/pdf", size: 6, chunks: ["YWJj", "ZGVm"] });
+  assert.equal(up.status, 201);
+  const { id: fid } = await up.json();
+  assert.equal((await c(`/api/notices/${a.id}/files`, "POST", { name: "big.bin", size: 99999999, chunks: ["x"] })).status, 400);
+  assert.equal((await c(`/api/notices/${a.id}/files`, "POST", { name: "x", size: 1, chunks: [] })).status, 400);
+  assert.equal((await c(`/api/notices/nope/files`, "POST", { name: "x", size: 1, chunks: ["a"] })).status, 404);
+  det = (await (await c("/api/notices/" + a.id + "?count=0", "GET")).json()).notice;
+  assert.equal(det.files.length, 1); assert.equal(det.files[0].name, "계획_서.pdf");
+  list = (await (await c("/api/notices", "GET")).json()).notices;
+  assert.equal(list.find((n) => n.id === a.id).files, 1);
+  const dl = await (await c("/api/notice-files/" + fid, "GET")).json();
+  assert.deepEqual(dl.chunks, ["YWJj", "ZGVm"]);
+  // 첨부 5개 제한
+  for (let i = 0; i < 4; i++) assert.equal((await c(`/api/notices/${a.id}/files`, "POST", { name: "f" + i, size: 1, chunks: ["QQ=="] })).status, 201);
+  assert.equal((await c(`/api/notices/${a.id}/files`, "POST", { name: "f5", size: 1, chunks: ["QQ=="] })).status, 400);
+  // 파일 삭제, 글 삭제(첨부 포함)
+  assert.equal((await c("/api/notice-files/" + fid, "DELETE")).status, 200);
+  assert.equal((await c("/api/notice-files/" + fid, "GET")).status, 404);
+  assert.equal((await c("/api/notices/" + a.id, "DELETE")).status, 200);
+  assert.equal((await c("/api/notices/" + a.id + "?count=0", "GET")).status, 404);
+  assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM notice_files").first()).n, 0);
+  assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM notice_chunks").first()).n, 0);
+});
