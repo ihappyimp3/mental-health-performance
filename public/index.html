@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>정신건강사업 실적판</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">정신건강사업 · 계획서별 지표 실적</div>
+      <h1><span id="yearTitle">2026</span>년 <span id="docTitle">전체 현황</span></h1>
+      <div class="sub"><span id="asof">불러오는 중…</span> <span class="sync" id="sync"></span></div>
+    </div>
+    <div class="controls">
+      <label for="yearSel" class="muted">연도</label>
+      <select id="yearSel"></select>
+      <button id="managePlans" type="button">지표 관리</button>
+      <button id="logout" type="button" class="ghost">로그아웃</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="계획서"></nav>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="summary" aria-label="요약">
+    <div class="stat"><span class="eyebrow">평균 달성률</span><span class="v" id="sRate">–</span><span class="d" id="sRateD">지표별 달성률의 평균</span></div>
+    <div class="stat"><span class="eyebrow">연간 경과율</span><span class="v" id="sElapsed">–</span><span class="d" id="sElapsedD">올해 지난 날의 비율</span></div>
+    <div class="stat"><span class="eyebrow">순항 / 전체 지표</span><span class="v" id="sOnTrack">–</span><span class="d">경과율 이상 달성한 지표</span></div>
+    <div class="stat"><span class="eyebrow">이번 달 입력</span><span class="v" id="sMonth">–</span><span class="d" id="sMonthD">실적 기록 건수</span></div>
+  </section>
+
+  <section class="panel" id="overviewPanel">
+    <div class="panel-h">
+      <h2>계획서별 현황</h2>
+      <div class="legend"><span class="pill done">달성</span><span class="pill ok">순항</span><span class="pill warn">주의</span><span class="pill bad">부진</span><span class="pill none">시작 전</span></div>
+    </div>
+    <div id="docGrid"></div>
+  </section>
+
+  <section class="panel" id="tablePanel">
+    <div class="panel-h">
+      <h2 id="tableTitle">지표별 진도</h2>
+      <div class="controls">
+        <div class="legend"><span><i></i>오늘 기준 경과율</span></div>
+        <button type="button" data-act="openPlans">지표 추가</button>
+      </div>
+    </div>
+    <div class="copybar" hidden></div>
+    <div class="scroll" id="planTableWrap"></div>
+  </section>
+
+  <section class="panel" id="heatPanel">
+    <div class="panel-h"><h2>월별 실적</h2><span class="hint">칸이 진할수록 그 달 실적이 월 목표(연간 목표÷12)에 가깝거나 넘은 것입니다.</span></div>
+    <div class="scroll" id="heatWrap"></div>
+  </section>
+
+  <div class="cols">
+    <section class="panel">
+      <div class="panel-h"><h2>실적 입력</h2></div>
+      <div class="panel-b">
+        <form class="entry" id="entryForm" autocomplete="off">
+          <div class="field">
+            <label for="fDoc">계획서</label>
+            <select id="fDoc"></select>
+          </div>
+          <div class="field">
+            <label for="fPlan">지표</label>
+            <select id="fPlan" required></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="fDate">실시 날짜</label>
+              <input type="date" id="fDate" required>
+            </div>
+            <div class="field">
+              <label for="fValue">실적 <span id="fUnit"></span></label>
+              <input type="number" id="fValue" step="any" min="0" inputmode="decimal" required placeholder="예: 25">
+            </div>
+          </div>
+          <div class="field">
+            <label for="fAuthor">입력자</label>
+            <input id="fAuthor" maxlength="30" placeholder="이름 (이 PC에 기억됩니다)" autocomplete="name">
+          </div>
+          <div class="field">
+            <label for="fNote">내용·비고</label>
+            <textarea id="fNote" rows="2" maxlength="300" placeholder="예: ○○동 경로당 우울 선별검사 (대상자 이름 등 개인정보는 적지 마세요)"></textarea>
+          </div>
+          <label class="check" id="linkWrap" hidden><input type="checkbox" id="fLink" checked><span id="linkText"></span></label>
+          <button class="primary" type="submit" id="fSubmit">실적 저장</button>
+          <div class="msg" id="fMsg" role="status"></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-h">
+        <h2>날짜별 실적 기록</h2>
+        <div class="controls">
+          <span id="logFilter"></span>
+          <select id="logMonth" aria-label="월 선택"></select>
+        </div>
+      </div>
+      <div class="panel-b" id="logWrap"></div>
+    </section>
+  </div>
+</div>
+
+<dialog id="planDlg">
+  <div class="dh"><h2>지표 관리</h2><button class="ghost" type="button" data-close>닫기</button></div>
+  <div class="db">
+    <form id="planForm" autocomplete="off" style="display:flex;flex-direction:column;gap:10px">
+      <div class="eyebrow" id="planFormTitle">새 지표 추가</div>
+      <div class="field"><label for="pDoc">계획서</label><select id="pDoc" required></select></div>
+      <div class="field"><label for="pName">지표명</label><input id="pName" required maxlength="80" placeholder="예: 우울증 선별검사 인원"></div>
+      <div class="field"><label for="pCat">산출내역</label><textarea id="pCat" rows="2" maxlength="300" placeholder="예: 선별검사 실시 인원 ÷ 목표 인원 × 100"></textarea></div>
+      <div class="field-row">
+        <div class="field"><label for="pTarget">연간 목표</label><input id="pTarget" type="number" step="any" min="0" required></div>
+        <div class="field"><label for="pUnit">단위</label><input id="pUnit" maxlength="10" placeholder="명, 회, 건, %"></div>
+      </div>
+      <div class="field"><label for="pOwner">담당</label><input id="pOwner" maxlength="30" placeholder="예: 김OO"></div>
+      <div class="msg" id="pMsg" role="status"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" id="pCancel" hidden>편집 취소</button>
+        <button class="primary" type="submit" id="pSubmit">지표 추가</button>
+      </div>
+    </form>
+    <div id="planListWrap"></div>
+    <div class="copybar inset" hidden></div>
+  </div>
+</dialog>
+
+<script src="/app.js"></script>
+</body>
+</html>
