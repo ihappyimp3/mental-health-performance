@@ -22,6 +22,7 @@ let plans=[], records=[], knownYears=[];
 let year = (()=>{ const y=+(store.get("mh_year")||0); return y>=2025&&y<=2030 ? y : today.getFullYear(); })();
 let curDoc = "all";
 let selPlan = null, logMonth = "all", editingPlan = null;
+let logSort = ["dateDesc","dateAsc","name"].includes(store.get("mh_logsort")) ? store.get("mh_logsort") : "dateDesc";
 const picked = new Set();
 let copyMsg = "", pasteYear = null, pasteDoc = null, closeAfterEdit = false;
 let loaded = false, lastSync = null;
@@ -224,6 +225,8 @@ function updateUnit(){
 $("#fDoc").addEventListener("change", ()=>fillPlanSelect());
 $("#fPlan").addEventListener("change", updateUnit);
 $("#logMonth").addEventListener("change", e=>{ logMonth=e.target.value; render(); });
+$("#logSort").value=logSort;
+$("#logSort").addEventListener("change", e=>{ logSort=e.target.value; store.set("mh_logsort", logSort); render(); });
 $("#fAuthor").value = store.get("mh_author") || "";
 $("#fAuthor").addEventListener("change", e=>store.set("mh_author", e.target.value.trim()));
 
@@ -232,7 +235,10 @@ function renderLog(rs, all){
   let list=rs.filter(r=>pmap[r.planId]);
   if(selPlan) list=list.filter(r=>r.planId===selPlan);
   if(logMonth!=="all") list=list.filter(r=>+r.date.slice(5,7)===+logMonth);
-  list.sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||"").localeCompare(a.createdAt||""));
+  const byNew=(a,b)=>b.date.localeCompare(a.date)||(b.createdAt||"").localeCompare(a.createdAt||"");
+  if(logSort==="dateAsc") list.sort((a,b)=>-byNew(a,b));
+  else if(logSort==="name") list.sort((a,b)=>String(pmap[a.planId].name).localeCompare(String(pmap[b.planId].name),"ko")||byNew(a,b));
+  else list.sort(byNew);
   $("#logFilter").innerHTML = selPlan&&pmap[selPlan] ? `<span class="filterchip">${esc(pmap[selPlan].name)}<button type="button" data-act="clearSel" aria-label="지표 필터 해제">×</button></span>` : "";
   const w=$("#logWrap");
   if(!list.length){ w.innerHTML=`<div class="empty">${rs.length?"이 조건에 맞는 실적이 없습니다.":"아직 입력된 실적이 없습니다. 왼쪽에서 날짜와 실적을 입력하면 여기에 쌓입니다."}</div>`; return; }
