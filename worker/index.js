@@ -161,6 +161,35 @@ async function api(request, env, url) {
     }
   }
 
+  // 일정(캘린더)
+  if (parts[0] === "events") {
+    if (parts.length === 1 && m === "GET") {
+      const from = String(url.searchParams.get("from") || ""), to = String(url.searchParams.get("to") || "");
+      if (!DATE_RE.test(from) || !DATE_RE.test(to)) return json({ error: "기간이 올바르지 않습니다." }, 400);
+      const rs = await db.prepare("SELECT * FROM events WHERE date >= ? AND date <= ? ORDER BY date, start_time, created_at").bind(from, to).all();
+      return json({ events: rs.results.map(eventOut) });
+    }
+    if (parts.length === 1 && m === "POST") {
+      const e = cleanEvent(await body(request));
+      if (e.error) return json({ error: e.error }, 400);
+      const id = crypto.randomUUID(), ts = now();
+      await db.prepare("INSERT INTO events (id,name,date,start_time,end_time,place,target,headcount,content,owner,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(id, e.name, e.date, e.start, e.end, e.place, e.target, e.headcount, e.content, e.owner, ts, ts).run();
+      return json({ id }, 201);
+    }
+    if (parts.length === 2 && m === "PUT") {
+      const e = cleanEvent(await body(request));
+      if (e.error) return json({ error: e.error }, 400);
+      const r = await db.prepare("UPDATE events SET name=?, date=?, start_time=?, end_time=?, place=?, target=?, headcount=?, content=?, owner=?, updated_at=? WHERE id=?")
+        .bind(e.name, e.date, e.start, e.end, e.place, e.target, e.headcount, e.content, e.owner, now(), parts[1]).run();
+      return r.meta.changes ? json({ ok: true }) : json({ error: "일정을 찾을 수 없습니다." }, 404);
+    }
+    if (parts.length === 2 && m === "DELETE") {
+      await db.prepare("DELETE FROM events WHERE id=?").bind(parts[1]).run();
+      return json({ ok: true });
+    }
+  }
+
   // POST /api/docs { name } — 계획서 추가
   if (parts[0] === "docs" && parts.length === 1 && m === "POST") {
     const name = str((await body(request)).name, 40);
@@ -295,6 +324,24 @@ async function api(request, env, url) {
 }
 
 /* ---------------- helpers ---------------- */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+function cleanEvent(b) {
+  const name = str(b.name, 80);
+  if (!name) return { error: "프로그램명을 입력하세요." };
+  const date = String(b.date || "");
+  if (!DATE_RE.test(date) || Number.isNaN(Date.parse(date))) return { error: "일시(날짜)를 입력하세요." };
+  const start = String(b.start || ""), end = String(b.end || "");
+  if ((start && !TIME_RE.test(start)) || (end && !TIME_RE.test(end))) return { error: "시간 형식이 올바르지 않습니다." };
+  if (end && !start) return { error: "종료 시간을 쓰려면 시작 시간도 입력하세요." };
+  if (start && end && end < start) return { error: "종료 시간이 시작 시간보다 빠릅니다." };
+  let headcount = null;
+  if (b.headcount !== "" && b.headcount != null) {
+    headcount = Number(b.headcount);
+    if (!Number.isInteger(headcount) || headcount < 0 || headcount > 100000) return { error: "인원은 0 이상의 정수로 입력하세요." };
+  }
+  return { name, date, start, end, place: str(b.place, 80), target: str(b.target, 80), headcount, content: str(b.content, 1000), owner: str(b.owner, 30) };
+}
+const eventOut = (e) => ({ id: e.id, name: e.name, date: e.date, start: e.start_time, end: e.end_time, place: e.place, target: e.target, headcount: e.headcount, content: e.content, owner: e.owner });
 function cleanPlan(b, docKeys) {
   const doc = String(b.doc || "");
   if (!docKeys.includes(doc)) return { error: "계획서를 선택하세요." };

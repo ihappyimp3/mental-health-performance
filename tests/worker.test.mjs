@@ -244,3 +244,27 @@ test("계획서 순서 변경", async () => {
   assert.equal((await keys())[0], k0[5]); assert.equal((await keys()).length, 10);
   assert.equal((await call(env, "/api/docs/reorder", { method: "POST", body: { keys: ["zzz"] }, cookie })).status, 400);
 });
+
+test("일정 추가·수정·삭제", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const post = (body) => call(env, "/api/events", { method: "POST", body, cookie });
+  const list = async () => (await (await call(env, "/api/events?from=2026-11-01&to=2026-11-30", { cookie })).json()).events;
+  assert.equal((await post({ name: "", date: "2026-11-10" })).status, 400);
+  assert.equal((await post({ name: "x", date: "2026-13-40" })).status, 400);
+  assert.equal((await post({ name: "x", date: "2026-11-10", start: "25:00" })).status, 400);
+  assert.equal((await post({ name: "x", date: "2026-11-10", start: "10:00", end: "09:00" })).status, 400);
+  assert.equal((await post({ name: "x", date: "2026-11-10", headcount: -3 })).status, 400);
+  const r = await post({ name: "마음건강 특강", date: "2026-11-10", start: "14:00", end: "16:00", place: "동구보건소", target: "지역주민", headcount: 30, content: "특강", owner: "홍길동" });
+  assert.equal(r.status, 201);
+  const { id } = await r.json();
+  await post({ name: "다른 달", date: "2026-12-01" });
+  let ev = await list();
+  assert.equal(ev.length, 1); assert.equal(ev[0].headcount, 30); assert.equal(ev[0].owner, "홍길동");
+  assert.equal((await call(env, "/api/events/" + id, { method: "PUT", body: { name: "수정됨", date: "2026-11-11", headcount: "" }, cookie })).status, 200);
+  ev = await list(); assert.equal(ev[0].name, "수정됨"); assert.equal(ev[0].date, "2026-11-11"); assert.equal(ev[0].headcount, null);
+  assert.equal((await call(env, "/api/events/nope", { method: "PUT", body: { name: "a", date: "2026-11-11" }, cookie })).status, 404);
+  assert.equal((await call(env, "/api/events/" + id, { method: "DELETE", cookie })).status, 200);
+  assert.equal((await list()).length, 0);
+  assert.equal((await call(env, "/api/events?from=bad&to=bad", { cookie })).status, 400);
+});

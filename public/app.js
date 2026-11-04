@@ -51,6 +51,7 @@ async function load(){
       if(first) readHash(); // 새로 만든 계획서 주소(#키)로 들어온 경우를 위해, 계획서 목록을 받은 뒤 다시 읽는다
       loaded=true; lastSync=new Date(); $("#banner").hidden=true;
       render();
+      loadEvents();
     }catch(err){ flash("데이터를 불러오지 못했습니다: "+err.message,true); }
     finally{ loading=null; }
   })();
@@ -62,7 +63,7 @@ document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState=
 
 /* ---------- 탭 (주소 #main 등으로 바로 열 수 있음) ---------- */
 function readHash(){ const h=location.hash.replace("#",""); curDoc = DOCMAP[h] ? h : "all"; selPlan=null; }
-window.addEventListener("hashchange", ()=>{ readHash(); render(); });
+window.addEventListener("hashchange", ()=>{ readHash(); render(); loadEvents(); });
 readHash();
 
 /* ---------- 연도 ---------- */
@@ -70,7 +71,7 @@ function fillYears(){
   const ys = new Set([2025,2026,2027,2028,2029,2030, ...knownYears, year]);
   $("#yearSel").innerHTML = [...ys].sort().map(y=>`<option value="${y}"${y===year?" selected":""}>${y}년</option>`).join("");
 }
-$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); pasteYear=null; selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; render(); load(); });
+$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); pasteYear=null; selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; calY=year; calSel=null; events=[]; render(); load(); });
 
 function elapsedRate(y){
   const ty=today.getFullYear();
@@ -155,6 +156,8 @@ function render(){
   }
 
   $("#tablePanel").hidden = isAll; $("#heatPanel").hidden = isAll;
+  $("#calPanel").hidden = !isAll; $("#logPanel").hidden = isAll;
+  if(isAll) renderCal();
   if(!isAll){
     $("#tableTitle").textContent = `${docName(curDoc)} 지표별 진도`;
     const tw=$("#planTableWrap");
@@ -258,6 +261,86 @@ function renderLog(rs, all){
       <div><div class="val">${fmt(+r.value||0)} <span class="muted">${esc(p.unit||"")}</span></div>
       <div class="acts"><button class="ghost danger" type="button" data-del="${esc(r.id)}">삭제</button></div></div></li>`;}).join("")}</ul>${list.length>200?`<div class="hint">최근 200건만 표시합니다. 월을 선택해 좁혀 보세요.</div>`:""}`;
 }
+
+/* ---------- 일정 캘린더 (전체 현황) ---------- */
+let events=[], calY=year, calM=today.getMonth()+1, calSel=null, calKey="";
+const WD=["일","월","화","수","목","금","토"];
+const dstr=(y,m,d)=>y+"-"+pad(m)+"-"+pad(d);
+function calRange(){
+  const first=new Date(calY,calM-1,1), start=new Date(calY,calM-1,1-first.getDay());
+  const last=new Date(calY,calM,0), end=new Date(calY,calM-1,last.getDate()+(6-last.getDay()));
+  const f=d=>dstr(d.getFullYear(),d.getMonth()+1,d.getDate());
+  return {start,end,from:f(start),to:f(end)};
+}
+async function loadEvents(){
+  if(curDoc!=="all") return;
+  const {from,to}=calRange(), key=from+"~"+to;
+  try{
+    const d=await api("GET",`/api/events?from=${from}&to=${to}`);
+    if(key!==calRange().from+"~"+calRange().to) return;
+    events=d.events||[]; calKey=key; renderCal();
+  }catch(err){ flash("일정을 불러오지 못했습니다: "+err.message,true); }
+}
+const evTime=e=>e.start?(e.end?`${e.start}~${e.end}`:e.start):"";
+function renderCal(){
+  const {start,end}=calRange();
+  $("#calTitle").textContent=`${calY}년 ${calM}월`;
+  const by={}; events.forEach(e=>(by[e.date]=by[e.date]||[]).push(e));
+  let cells=WD.map(w=>`<div class="wd">${w}</div>`).join("");
+  for(let d=new Date(start); d<=end; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){
+    const ds=dstr(d.getFullYear(),d.getMonth()+1,d.getDate()), list=by[ds]||[];
+    cells+=`<button type="button" class="day${d.getMonth()+1!==calM?" out":""}${ds===todayStr?" today":""}${ds===calSel?" sel":""}" data-day="${ds}" aria-label="${ds} 일정 ${list.length}건"><span class="dn">${d.getDate()}</span>${list.slice(0,2).map(e=>`<span class="ev" title="${esc(e.name)}">${esc(e.name)}</span>`).join("")}${list.length>2?`<span class="more">+${list.length-2}건</span>`:""}</button>`;
+  }
+  $("#calGrid").innerHTML=`<div class="calgrid">${cells}</div>`;
+  const inMonth=events.filter(e=>+e.date.slice(5,7)===calM && +e.date.slice(0,4)===calY);
+  const shown=calSel?events.filter(e=>e.date===calSel):inMonth;
+  const head=calSel?`<span>${esc(calSel)} 일정 ${shown.length}건</span><button type="button" class="ghost" data-cal="all">${calM}월 전체 보기</button>`:`<span>${calM}월 일정 ${shown.length}건</span>`;
+  $("#calList").innerHTML=`<div class="calhead">${head}</div>`+(shown.length?`<ul class="evlist">${shown.map(e=>{
+    const meta=[evTime(e),e.place,e.target&&`대상 ${e.target}`,e.headcount!=null&&`${e.headcount}명`,e.owner&&`담당 ${e.owner}`].filter(Boolean).map(esc).join(" · ");
+    return `<li><div><div class="t">${calSel?"":`<span class="tag">${esc(e.date.slice(5))}</span>`}${esc(e.name)}</div>${meta?`<div class="m">${meta}</div>`:""}${e.content?`<div class="m">${esc(e.content)}</div>`:""}</div><div class="acts"><button class="ghost" type="button" data-evedit="${esc(e.id)}">수정</button><button class="ghost danger" type="button" data-evdel="${esc(e.id)}">삭제</button></div></li>`;}).join("")}</ul>`:`<div class="empty">${calSel?"이 날짜에 등록된 일정이 없습니다.":"이 달에 등록된 일정이 없습니다."} 「일정 추가」로 등록하세요.</div>`);
+}
+function calGo(y,m){ calY=y; calM=m; calSel=null; events=[]; renderCal(); loadEvents(); }
+const evDlg=$("#evDlg"); let editingEv=null;
+evDlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.target===evDlg) evDlg.close(); });
+function openEvDlg(id){
+  const ev=id&&events.find(x=>x.id===id); editingEv=ev?ev.id:null;
+  $("#evForm").reset(); $("#eMsg").textContent="";
+  $("#evDlgTitle").textContent=ev?"일정 수정":"일정 추가"; $("#eSubmit").textContent=ev?"수정 저장":"추가";
+  $("#eName").value=ev?ev.name:""; $("#eDate").value=ev?ev.date:(calSel||(calY===today.getFullYear()&&calM===today.getMonth()+1?todayStr:dstr(calY,calM,1)));
+  $("#eStart").value=ev?ev.start:""; $("#eEnd").value=ev?ev.end:""; $("#ePlace").value=ev?ev.place:"";
+  $("#eTarget").value=ev?ev.target:""; $("#eCount").value=ev&&ev.headcount!=null?ev.headcount:""; $("#eContent").value=ev?ev.content:"";
+  $("#eOwner").value=ev?ev.owner:(store.get("mh_author")||"");
+  evDlg.showModal(); $("#eName").focus();
+}
+$("#evForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const m=$("#eMsg"), btn=$("#eSubmit"); btn.disabled=true;
+  const body={name:$("#eName").value.trim(),date:$("#eDate").value,start:$("#eStart").value,end:$("#eEnd").value,place:$("#ePlace").value.trim(),target:$("#eTarget").value.trim(),headcount:$("#eCount").value,content:$("#eContent").value.trim(),owner:$("#eOwner").value.trim()};
+  try{
+    if(editingEv) await api("PUT","/api/events/"+encodeURIComponent(editingEv),body); else await api("POST","/api/events",body);
+    evDlg.close();
+    const [y,mo]=body.date.split("-").map(Number); calY=y; calM=mo; calSel=body.date; // 저장한 날짜로 이동
+    events=[]; renderCal(); await loadEvents();
+  }catch(err){ m.className="msg err"; m.textContent="저장하지 못했습니다: "+err.message; }
+  finally{ btn.disabled=false; }
+});
+document.addEventListener("click", e=>{
+  const c=e.target.closest("[data-cal]");
+  if(c){
+    const a=c.dataset.cal;
+    if(a==="prev") calGo(calM===1?calY-1:calY, calM===1?12:calM-1);
+    else if(a==="next") calGo(calM===12?calY+1:calY, calM===12?1:calM+1);
+    else if(a==="today") { calSel=todayStr; calGo(today.getFullYear(),today.getMonth()+1); calSel=todayStr; renderCal(); }
+    else if(a==="all"){ calSel=null; renderCal(); }
+    else if(a==="add") openEvDlg(null);
+    return;
+  }
+  const d=e.target.closest("[data-day]");
+  if(d){ calSel=calSel===d.dataset.day?null:d.dataset.day; const [y,m]=d.dataset.day.split("-").map(Number); if(m!==calM||y!==calY){ calY=y; calM=m; events=[]; renderCal(); loadEvents(); } else renderCal(); return; }
+  const ed=e.target.closest("[data-evedit]"); if(ed){ openEvDlg(ed.dataset.evedit); return; }
+  const dl=e.target.closest("[data-evdel]");
+  if(dl) confirmThen(dl, async()=>{ try{ await api("DELETE","/api/events/"+encodeURIComponent(dl.dataset.evdel)); await loadEvents(); }catch(err){ flash("삭제하지 못했습니다: "+err.message,true); } });
+});
 
 /* ---------- 클릭 처리 ---------- */
 document.addEventListener("click", e=>{
