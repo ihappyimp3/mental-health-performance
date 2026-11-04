@@ -86,12 +86,13 @@ function allYearPlans(){ return plans.filter(p=>p.year===year).sort((a,b)=>(a.or
 function scopedPlans(){ const ps=allYearPlans(); return curDoc==="all"?ps:ps.filter(p=>docOf(p)===curDoc); }
 function yearRecords(){ const pre=year+"-"; return records.filter(r=>typeof r.date==="string" && r.date.startsWith(pre)); }
 function stats(){
-  const totals={}, last={}, monthly={};
+  // 입력값은 누적 실적이므로 합산하지 않고, 날짜가 가장 늦은(같은 날이면 나중에 입력한) 값을 최근 실적으로 쓴다.
+  const totals={}, last={}, lastKey={}, monthly={}, monthKey={};
   yearRecords().forEach(r=>{
-    totals[r.planId]=(totals[r.planId]||0)+(+r.value||0);
-    if(!last[r.planId] || r.date>last[r.planId]) last[r.planId]=r.date;
-    const m=+r.date.slice(5,7);
-    (monthly[r.planId]=monthly[r.planId]||{})[m]=(monthly[r.planId][m]||0)+(+r.value||0);
+    const k=r.date+"|"+(r.createdAt||""), v=+r.value||0;
+    if(!(r.planId in lastKey) || k>lastKey[r.planId]){ lastKey[r.planId]=k; totals[r.planId]=v; last[r.planId]=r.date; }
+    const m=+r.date.slice(5,7), mk=r.planId+"|"+m;
+    if(!(mk in monthKey) || k>monthKey[mk]){ monthKey[mk]=k; (monthly[r.planId]=monthly[r.planId]||{})[m]=v; }
   });
   return {totals,last,monthly};
 }
@@ -153,18 +154,16 @@ function render(){
       tw.innerHTML=`<div class="empty"><strong>${year}년 ${esc(docName(curDoc))} 지표가 아직 없습니다.</strong><span>계획서에 있는 성과지표와 연간 목표를 등록하면 날짜별 실적을 입력할 수 있어요.</span><button class="primary" type="button" data-act="openPlans">지표 추가</button></div>`;
     } else {
       const allPicked = ps.every(p=>picked.has(p.id));
-      tw.innerHTML=`<table><thead><tr><th class="pk"><input type="checkbox" class="pick" id="pickAll" data-pickall aria-label="이 계획서 지표 모두 선택"${allPicked?" checked":""}></th><th>지표</th><th>담당</th><th class="r">연간 목표</th><th class="r">누적 실적</th><th>달성률</th><th class="r"></th><th>상태</th><th>최근 입력</th></tr></thead><tbody>${
+      tw.innerHTML=`<table><thead><tr><th class="pk"><input type="checkbox" class="pick" id="pickAll" data-pickall aria-label="이 계획서 지표 모두 선택"${allPicked?" checked":""}></th><th>지표명</th><th class="r">연간 목표</th><th class="r">최근 실적</th><th>달성률</th><th class="r"></th><th>상태</th></tr></thead><tbody>${
         ps.map((p,i)=>{ const r=rates[i], [cls,lab]=status(r,el,!!last[p.id]);
           return `<tr class="row${selPlan===p.id?" sel":""}" data-plan="${esc(p.id)}" tabindex="0" title="이 지표의 실적만 보기">
             <td class="pk"><input type="checkbox" class="pick" id="pick-${esc(p.id)}" data-pick="${esc(p.id)}" aria-label="${esc(p.name)} 선택"${picked.has(p.id)?" checked":""}></td>
             <td><div class="pname">${esc(p.name)}</div>${p.calc?`<div class="pcat">산출내역: ${esc(p.calc)}</div>`:""}</td>
-            <td class="muted">${esc(p.owner||"")}</td>
             <td class="r num">${fmt(p.target||0)} <span class="muted">${esc(p.unit||"")}</span></td>
-            <td class="r num">${fmt(totals[p.id]||0)}</td>
+            <td class="r num">${last[p.id]?`${fmt(totals[p.id]||0)} <span class="muted">${esc(p.unit||"")}</span><div class="pcat">${last[p.id].slice(5).replace("-","/")} 입력</div>`:`<span class="muted">–</span>`}</td>
             <td><div class="prog" role="img" aria-label="달성률 ${pct(r)}, 경과율 ${pct(el)}"><div class="fill" style="width:${Math.min(r,100)}%"></div><div class="mark" style="left:calc(${Math.min(el,100)}% - 1px)"></div></div></td>
             <td class="r num">${p.target>0?pct(r):"목표 없음"}</td>
-            <td><span class="pill ${cls}">${lab}</span></td>
-            <td class="num muted">${last[p.id]?last[p.id].slice(5).replace("-","/"):"–"}</td></tr>`; }).join("")
+            <td><span class="pill ${cls}">${lab}</span></td></tr>`; }).join("")
       }</tbody></table>`;
     }
     const hw=$("#heatWrap");
@@ -174,11 +173,10 @@ function render(){
       for(let m=1;m<=12;m++) h+=`<th class="${curM===m?"now":""}">${m}월</th>`;
       h+=`</tr></thead><tbody>`;
       ps.forEach(p=>{
-        const mt=p.target>0?p.target/12:0;
         h+=`<tr><td><span class="pname">${esc(p.name)}</span></td>`;
         for(let m=1;m<=12;m++){
           const v=(monthly[p.id]||{})[m]||0;
-          const a=v===0?0:mt>0?Math.min(1,.15+.85*v/mt):.5;
+          const a=v===0?0:p.target>0?Math.min(1,.15+.85*v/p.target):.5;
           h+=`<td class="c" style="background:rgba(var(--heat),${a.toFixed(2)});${a>.6?"color:var(--bg);font-weight:600":""}" title="${esc(p.name)} ${m}월: ${fmt(v)}${esc(p.unit||"")}">${v?fmt(v):""}</td>`;
         }
         h+=`</tr>`;
