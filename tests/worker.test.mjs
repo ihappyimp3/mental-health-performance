@@ -230,3 +230,17 @@ test("계획서 추가·이름 수정", async () => {
   // 없는 계획서에는 지표를 만들 수 없다
   assert.equal((await call(env, "/api/plans", { method: "POST", body: { year: 2026, doc: "zzz", name: "x", target: 1 }, cookie })).status, 400);
 });
+
+test("계획서 순서 변경", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const keys = async () => (await (await call(env, "/api/data?year=2026", { cookie })).json()).docs.map((d) => d.key);
+  const k0 = await keys();
+  const next = [k0[2], ...k0.filter((k) => k !== k0[2])];
+  assert.equal((await call(env, "/api/docs/reorder", { method: "POST", body: { keys: next }, cookie })).status, 200);
+  assert.deepEqual(await keys(), next);
+  // 일부만 보내면 나머지는 뒤에 유지, 모르는 키는 무시
+  assert.equal((await call(env, "/api/docs/reorder", { method: "POST", body: { keys: [k0[5], "zzz"] }, cookie })).status, 200);
+  assert.equal((await keys())[0], k0[5]); assert.equal((await keys()).length, 10);
+  assert.equal((await call(env, "/api/docs/reorder", { method: "POST", body: { keys: ["zzz"] }, cookie })).status, 400);
+});

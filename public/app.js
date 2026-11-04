@@ -137,14 +137,15 @@ function render(){
   if(isAll){
     const cards = DOCS.map(t=>{
       const dps=all.filter(p=>docOf(p)===t.key);
-      const edit=`<button class="ghost docedit" type="button" data-docedit="${esc(t.key)}" aria-label="${esc(t.name)} 이름 수정">이름 수정</button>`;
-      if(!dps.length) return `<div class="docwrap"><a class="doccard empty-card" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3></div><div class="meta">등록된 지표 없음 · 눌러서 추가</div></a>${edit}</div>`;
+      const mv=`<span class="docmv"><button class="ghost" type="button" data-docmove="-1" data-key="${esc(t.key)}" aria-label="${esc(t.name)} 앞으로">◀</button><button class="ghost" type="button" data-docmove="1" data-key="${esc(t.key)}" aria-label="${esc(t.name)} 뒤로">▶</button></span>`;
+      const edit=mv+`<button class="ghost docedit" type="button" data-docedit="${esc(t.key)}" aria-label="${esc(t.name)} 이름 수정">이름 수정</button>`;
+      if(!dps.length) return `<div class="docwrap" draggable="true" data-doc="${esc(t.key)}" title="끌어서 순서 바꾸기"><a class="doccard empty-card" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3></div><div class="meta">등록된 지표 없음 · 눌러서 추가</div></a>${edit}</div>`;
       const st={done:0,ok:0,warn:0,bad:0,none:0}; const lag=[]; let sum=0;
       dps.forEach(p=>{ const r=rateOf(p,totals); sum+=Math.min(r,100); const [c]=status(r,el,!!last[p.id]); st[c]++; if(c==="bad") lag.push(p.name); });
       const n=dps.length, keys=["done","ok","warn","bad","none"], labels={done:"달성",ok:"순항",warn:"주의",bad:"부진",none:"시작 전"};
       const bar=keys.map(k=>st[k]?`<span class="s-${k}" style="width:${st[k]/n*100}%"></span>`:"").join("");
       const label=keys.filter(k=>st[k]).map(k=>labels[k]+" "+st[k]).join(" · ");
-      return `<div class="docwrap"><a class="doccard" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3><span class="meta">지표 ${n}</span></div>
+      return `<div class="docwrap" draggable="true" data-doc="${esc(t.key)}" title="끌어서 순서 바꾸기"><a class="doccard" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3><span class="meta">지표 ${n}</span></div>
         <div class="rate">${pct(sum/n)}</div>
         <div class="stack" role="img" aria-label="${esc(label)}">${bar}</div>
         <div class="meta">${esc(label)}</div>
@@ -577,6 +578,48 @@ async function deleteSelected(){
     picked.clear(); copyMsg=`${r.count}개 지표를 삭제했습니다.`; await load(); render();
   }catch(err){ flash("삭제하지 못했습니다: "+err.message,true); }
 }
+
+/* 계획서 카드 끌어서 순서 바꾸기 (현황·탭 순서 공통) */
+let dragDoc=null;
+const clearDocDrop=()=>document.querySelectorAll(".docwrap.drop-before,.docwrap.drop-after,.docwrap.dragging").forEach(el=>el.classList.remove("drop-before","drop-after","dragging"));
+async function commitDocOrder(keys){
+  const prev=DOCS.slice();
+  setDocs(keys.map(k=>DOCMAP[k]).filter(Boolean)); render();
+  try{ await api("POST","/api/docs/reorder",{keys}); }
+  catch(err){ setDocs(prev); render(); flash("순서를 바꾸지 못했습니다: "+err.message,true); }
+}
+function moveDoc(key,dir){
+  const keys=DOCS.map(d=>d.key), i=keys.indexOf(key), j=i+dir;
+  if(i<0||j<0||j>=keys.length) return;
+  keys.splice(j,0,keys.splice(i,1)[0]); commitDocOrder(keys);
+}
+document.addEventListener("click", e=>{
+  const b=e.target.closest("[data-docmove]"); if(!b) return;
+  moveDoc(b.dataset.key,+b.dataset.docmove);
+});
+document.addEventListener("dragstart", e=>{
+  const w=e.target.closest?.(".docwrap"); if(!w||dragIds) return;
+  dragDoc=w.dataset.doc; w.classList.add("dragging");
+  e.dataTransfer.effectAllowed="move"; e.dataTransfer.setData("text/plain", dragDoc);
+});
+document.addEventListener("dragover", e=>{
+  if(!dragDoc) return;
+  const w=e.target.closest?.(".docwrap"); if(!w||w.dataset.doc===dragDoc) return;
+  e.preventDefault(); e.dataTransfer.dropEffect="move";
+  const r=w.getBoundingClientRect(), after=e.clientX>r.left+r.width/2;
+  document.querySelectorAll(".docwrap.drop-before,.docwrap.drop-after").forEach(el=>el.classList.remove("drop-before","drop-after"));
+  w.classList.add(after?"drop-after":"drop-before");
+});
+document.addEventListener("drop", e=>{
+  if(!dragDoc) return;
+  const w=e.target.closest?.(".docwrap"); if(!w||w.dataset.doc===dragDoc) return;
+  e.preventDefault();
+  const r=w.getBoundingClientRect(), after=e.clientX>r.left+r.width/2, from=dragDoc;
+  clearDocDrop(); dragDoc=null;
+  const rest=DOCS.map(d=>d.key).filter(k=>k!==from), at=rest.indexOf(w.dataset.doc)+(after?1:0);
+  commitDocOrder([...rest.slice(0,at),from,...rest.slice(at)]);
+});
+document.addEventListener("dragend", ()=>{ clearDocDrop(); dragDoc=null; });
 
 /* 끌어서 놓기 (표의 ⠿ 손잡이) */
 let dragIds=null;

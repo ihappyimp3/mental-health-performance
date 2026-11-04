@@ -172,6 +172,15 @@ async function api(request, env, url) {
     await db.prepare("INSERT INTO docs (key,name,ord,created_at) VALUES (?,?,?,?)").bind(key, name, ord, now()).run();
     return json({ key }, 201);
   }
+  // POST /api/docs/reorder { keys:[앞에서부터 새 순서] } — 계획서 현황·탭 순서
+  if (parts[0] === "docs" && parts[1] === "reorder" && m === "POST") {
+    const b = await body(request);
+    const asked = Array.isArray(b.keys) ? b.keys.map(String).filter((k, i, a) => docKeys.includes(k) && a.indexOf(k) === i) : [];
+    if (!asked.length) return json({ error: "순서를 바꿀 수 없습니다." }, 400);
+    const keys = [...asked, ...docKeys.filter((k) => !asked.includes(k))]; // 빠진 계획서는 뒤에 그대로
+    await db.batch(keys.map((k, i) => db.prepare("UPDATE docs SET ord=? WHERE key=?").bind(i, k)));
+    return json({ ok: true });
+  }
   // PUT /api/docs/:key { name } — 계획서 이름 수정 (지표·실적은 그대로)
   if (parts[0] === "docs" && parts.length === 2 && m === "PUT") {
     const key = parts[1], name = str((await body(request)).name, 40);

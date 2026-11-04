@@ -163,3 +163,10 @@ td.act .ghost{padding:4px 8px}
 .docwrap .doccard{flex:1}
 .docedit{position:absolute;right:6px;bottom:6px;font-size:.75rem;padding:2px 8px}
 .doccard{padding-bottom:30px}
+.docwrap[draggable=true]{cursor:grab}
+.docwrap.dragging{opacity:.45}
+.docwrap.drop-before::before,.docwrap.drop-after::after{content:"";position:absolute;top:0;bottom:0;width:4px;background:var(--accent);border-radius:2px}
+.docwrap.drop-before::before{left:-8px}
+.docwrap.drop-after::after{right:-8px}
+.docmv{position:absolute;right:6px;top:6px;display:flex;gap:2px}
+.docmv button{font-size:.7rem;padding:1px 6px;line-height:1.4}
