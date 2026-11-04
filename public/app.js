@@ -1,11 +1,13 @@
 (function(){
 "use strict";
-const DOCS=[
+// 계획서 목록은 서버(DB)에서 받는다. 처음 화면용 기본값만 둔다.
+let DOCS=[
   {key:"main",name:"주요업무계획"},{key:"district",name:"구정성과"},{key:"dept",name:"부서별 성과관리"},
   {key:"budget",name:"예산의 성과지표"},{key:"audit",name:"행정사무감사"},{key:"health",name:"지역보건의료계획"},
   {key:"center",name:"센터 계획서"},{key:"child",name:"아동정책계획"},{key:"youth",name:"청년정책계획"},{key:"rights",name:"인권계획"}
 ];
-const DOCMAP=Object.fromEntries(DOCS.map(d=>[d.key,d]));
+let DOCMAP=Object.fromEntries(DOCS.map(d=>[d.key,d]));
+function setDocs(list){ DOCS=list.map(d=>({key:d.key,name:d.name})); DOCMAP=Object.fromEntries(DOCS.map(d=>[d.key,d])); }
 const docName = k => DOCMAP[k]?.name || "미분류";
 
 const $ = s => document.querySelector(s);
@@ -43,7 +45,10 @@ async function load(){
     try{
       const d=await api("GET","/api/data?year="+y);
       if(y!==year) return;
+      if(d.docs&&d.docs.length) setDocs(d.docs);
+      const first=!loaded;
       plans=d.plans; records=d.records; knownYears=d.years||[];
+      if(first) readHash(); // 새로 만든 계획서 주소(#키)로 들어온 경우를 위해, 계획서 목록을 받은 뒤 다시 읽는다
       loaded=true; lastSync=new Date(); $("#banner").hidden=true;
       render();
     }catch(err){ flash("데이터를 불러오지 못했습니다: "+err.message,true); }
@@ -132,17 +137,18 @@ function render(){
   if(isAll){
     const cards = DOCS.map(t=>{
       const dps=all.filter(p=>docOf(p)===t.key);
-      if(!dps.length) return `<a class="doccard empty-card" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3></div><div class="meta">등록된 지표 없음 · 눌러서 추가</div></a>`;
+      const edit=`<button class="ghost docedit" type="button" data-docedit="${esc(t.key)}" aria-label="${esc(t.name)} 이름 수정">이름 수정</button>`;
+      if(!dps.length) return `<div class="docwrap"><a class="doccard empty-card" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3></div><div class="meta">등록된 지표 없음 · 눌러서 추가</div></a>${edit}</div>`;
       const st={done:0,ok:0,warn:0,bad:0,none:0}; const lag=[]; let sum=0;
       dps.forEach(p=>{ const r=rateOf(p,totals); sum+=Math.min(r,100); const [c]=status(r,el,!!last[p.id]); st[c]++; if(c==="bad") lag.push(p.name); });
       const n=dps.length, keys=["done","ok","warn","bad","none"], labels={done:"달성",ok:"순항",warn:"주의",bad:"부진",none:"시작 전"};
       const bar=keys.map(k=>st[k]?`<span class="s-${k}" style="width:${st[k]/n*100}%"></span>`:"").join("");
       const label=keys.filter(k=>st[k]).map(k=>labels[k]+" "+st[k]).join(" · ");
-      return `<a class="doccard" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3><span class="meta">지표 ${n}</span></div>
+      return `<div class="docwrap"><a class="doccard" href="#${t.key}"><div class="top"><h3>${esc(t.name)}</h3><span class="meta">지표 ${n}</span></div>
         <div class="rate">${pct(sum/n)}</div>
         <div class="stack" role="img" aria-label="${esc(label)}">${bar}</div>
         <div class="meta">${esc(label)}</div>
-        ${lag.length?`<div class="lag" title="${esc(lag.join(", "))}">부진: ${esc(lag.slice(0,2).join(", "))}${lag.length>2?` 외 ${lag.length-2}`:""}</div>`:""}</a>`;
+        ${lag.length?`<div class="lag" title="${esc(lag.join(", "))}">부진: ${esc(lag.slice(0,2).join(", "))}${lag.length>2?` 외 ${lag.length-2}`:""}</div>`:""}</a>${edit}</div>`;
     }).join("");
     $("#docGrid").innerHTML=`<div class="docgrid">${cards}</div>`;
   }
@@ -188,6 +194,7 @@ function render(){
     }
   }
 
+  fillDocSelect();
   renderForm(all);
   const lm=$("#logMonth");
   lm.innerHTML=`<option value="all">전체 월</option>`+Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}월</option>`).join("");
@@ -272,6 +279,8 @@ document.addEventListener("click", e=>{
   if(act==="paste"){ doPaste(actEl.closest(".copybar")); return; }
   if(act==="unpick"){ picked.clear(); copyMsg=""; render(); return; }
   if(act==="openPlans"){ openPlans(); return; }
+  if(act==="adddoc"){ openDocDlg(null); return; }
+  if(act==="editdoc"){ openDocDlg(curDoc); return; }
   if(act==="clearSel"){ selPlan=null; render(); return; }
   const row=e.target.closest("tr.row");
   if(row && !e.target.closest("button,a,input,select,label")){ selPlan=selPlan===row.dataset.plan?null:row.dataset.plan; render(); return; }
@@ -285,6 +294,8 @@ document.addEventListener("click", e=>{
       catch(err){ $("#pMsg").className="msg err"; $("#pMsg").textContent="삭제하지 못했습니다: "+err.message; flash("삭제하지 못했습니다: "+err.message,true); }
     }, n?`실적 ${n}건도 삭제`:"삭제 확인");
   }
+  const de=e.target.closest("[data-docedit]");
+  if(de){ openDocDlg(de.dataset.docedit); return; }
   const mv=e.target.closest("[data-pmove]");
   if(mv){ const [id,d]=mv.dataset.pmove.split(":"); movePlans([id],+d, mv.dataset.pmove); return; }
   const pedit=e.target.closest("[data-pedit]");
@@ -327,7 +338,13 @@ $("#entryForm").addEventListener("submit", async e=>{
 
 /* ---------- 지표 관리 ---------- */
 const dlg=$("#planDlg");
-$("#pDoc").innerHTML = DOCS.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("");
+function fillDocSelect(){
+  const sel=$("#pDoc"), html=DOCS.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("");
+  if(sel.dataset.sig===html) return;
+  const cur=sel.value; sel.innerHTML=html; sel.dataset.sig=html;
+  if(DOCMAP[cur]) sel.value=cur;
+}
+fillDocSelect();
 function openPlans(){ resetPlanForm(); renderPlanList(); dlg.showModal(); $("#pName").focus(); }
 $("#managePlans").addEventListener("click", openPlans);
 dlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.target===dlg) dlg.close(); });
@@ -498,6 +515,33 @@ function gotoPlans(bar){
 }
 document.addEventListener("keydown", e=>{
   if(e.key==="Enter" && e.target.matches(".mvPos")){ e.preventDefault(); gotoPlans(e.target.closest(".copybar")); }
+});
+
+/* ---------- 계획서 추가·이름 수정 ---------- */
+const docDlg=$("#docDlg"); let editingDoc=null;
+docDlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.target===docDlg) docDlg.close(); });
+function openDocDlg(key){
+  editingDoc = key && DOCMAP[key] ? key : null;
+  $("#docForm").reset(); $("#dMsg").textContent="";
+  $("#docDlgTitle").textContent = editingDoc ? "계획서 이름 수정" : "계획서 추가";
+  $("#docDlgHint").textContent = editingDoc ? "이름을 바꿔도 이 계획서의 지표와 실적은 그대로 유지됩니다." : "새 계획서는 모든 연도에서 쓸 수 있고, 만든 뒤 지표를 추가하면 됩니다.";
+  $("#dSubmit").textContent = editingDoc ? "저장" : "추가";
+  if(editingDoc) $("#dName").value=DOCMAP[editingDoc].name;
+  docDlg.showModal(); $("#dName").focus(); $("#dName").select();
+}
+$("#docForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const m=$("#dMsg"), name=$("#dName").value.trim();
+  if(!name){ m.className="msg err"; m.textContent="계획서 이름을 입력하세요."; return; }
+  const btn=$("#dSubmit"); btn.disabled=true;
+  try{
+    if(editingDoc){ await api("PUT","/api/docs/"+encodeURIComponent(editingDoc),{name}); await load(); docDlg.close(); copyMsg=""; render(); }
+    else{
+      const r=await api("POST","/api/docs",{name}); await load(); docDlg.close();
+      location.hash=r.key; // 새 계획서 탭으로 이동
+    }
+  }catch(err){ m.className="msg err"; m.textContent="저장하지 못했습니다: "+err.message; }
+  finally{ btn.disabled=false; }
 });
 
 /* ---------- 선택한 지표 수정·삭제 ---------- */

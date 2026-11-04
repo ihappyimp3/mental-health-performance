@@ -2,13 +2,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import worker from "../worker/index.js";
 
 function makeD1() {
   const sql = new DatabaseSync(":memory:");
   sql.exec("PRAGMA foreign_keys=ON");
-  sql.exec(readFileSync(new URL("../migrations/0001_init.sql", import.meta.url), "utf8"));
+  for (const f of readdirSync(new URL("../migrations/", import.meta.url)).filter((x) => x.endsWith(".sql")).sort()) sql.exec(readFileSync(new URL("../migrations/" + f, import.meta.url), "utf8"));
   const stmt = (q, args = []) => ({
     bind: (...a) => stmt(q, a),
     all: async () => ({ results: sql.prepare(q).all(...args) }),
@@ -198,4 +198,35 @@ test("연도 전체 복사: 계획서 유지, 순서 유지, 실적 제외, 중�
   assert.equal(d.records.length, 0);
   assert.deepEqual((await copy({ ids: [a, b, c], keepDoc: true, year: 2027 })).skipped.sort(), ["둘째", "셋째", "첫째"]);
   assert.equal((await call(env, "/api/plans/copy", { method: "POST", body: { ids: [a], year: 2027 }, cookie })).status, 400);
+});
+
+test("계획서 추가·이름 수정", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const get = async () => (await (await call(env, "/api/data?year=2026", { cookie })).json());
+  let d = await get();
+  assert.equal(d.docs.length, 10); assert.equal(d.docs[0].name, "주요업무계획");
+
+  const add = (name) => call(env, "/api/docs", { method: "POST", body: { name }, cookie });
+  const r = await add("정신건강 중장기계획");
+  assert.equal(r.status, 201);
+  const { key } = await r.json();
+  assert.equal((await add("정신건강중장기계획")).status, 409); // 공백만 다른 이름도 중복
+  assert.equal((await add("   ")).status, 400);
+  d = await get();
+  assert.equal(d.docs.length, 11); assert.equal(d.docs[10].key, key);
+
+  // 새 계획서에 지표를 만들 수 있고, 이름을 바꿔도 지표가 유지된다
+  const p = await call(env, "/api/plans", { method: "POST", body: { year: 2026, doc: key, name: "지표1", target: 5 }, cookie });
+  assert.equal(p.status, 201);
+  assert.equal((await call(env, "/api/docs/" + key, { method: "PUT", body: { name: "중장기 계획서" }, cookie })).status, 200);
+  assert.equal((await call(env, "/api/docs/" + key, { method: "PUT", body: { name: "구정성과" }, cookie })).status, 409);
+  assert.equal((await call(env, "/api/docs/nope", { method: "PUT", body: { name: "x" }, cookie })).status, 404);
+  d = await get();
+  assert.equal(d.docs.find((x) => x.key === key).name, "중장기 계획서");
+  assert.equal(d.plans.filter((x) => x.doc === key).length, 1);
+  // 기본 계획서 이름도 바꿀 수 있다
+  assert.equal((await call(env, "/api/docs/main", { method: "PUT", body: { name: "주요업무계획(수정)" }, cookie })).status, 200);
+  // 없는 계획서에는 지표를 만들 수 없다
+  assert.equal((await call(env, "/api/plans", { method: "POST", body: { year: 2026, doc: "zzz", name: "x", target: 1 }, cookie })).status, 400);
 });

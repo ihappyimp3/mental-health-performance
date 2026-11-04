@@ -37,7 +37,10 @@
   <section class="panel" id="overviewPanel">
     <div class="panel-h">
       <h2>계획서별 현황</h2>
-      <div class="legend"><span class="pill done">달성</span><span class="pill ok">순항</span><span class="pill warn">주의</span><span class="pill bad">부진</span><span class="pill none">시작 전</span></div>
+      <div class="controls">
+        <div class="legend"><span class="pill done">달성</span><span class="pill ok">순항</span><span class="pill warn">주의</span><span class="pill bad">부진</span><span class="pill none">시작 전</span></div>
+        <button type="button" data-act="adddoc">계획서 추가</button>
+      </div>
     </div>
     <div id="docGrid"></div>
   </section>
@@ -47,6 +50,7 @@
       <h2 id="tableTitle">지표별 진도</h2>
       <div class="controls">
         <div class="legend"><span><i></i>오늘 기준 경과율</span></div>
+        <button type="button" data-act="editdoc">계획서 이름 수정</button>
         <button type="button" data-act="openPlans">지표 추가</button>
       </div>
     </div>
@@ -142,6 +146,18 @@
     </form>
     <div id="planListWrap"></div>
     <div class="copybar inset" hidden></div>
+  </div>
+</dialog>
+
+<dialog id="docDlg">
+  <div class="dh"><h2 id="docDlgTitle">계획서 추가</h2><button class="ghost" type="button" data-close>닫기</button></div>
+  <div class="db">
+    <p class="hint" style="margin:0" id="docDlgHint"></p>
+    <form id="docForm" autocomplete="off" style="display:flex;flex-direction:column;gap:10px">
+      <div class="field"><label for="dName">계획서 이름</label><input id="dName" required maxlength="40" placeholder="예: 정신건강복지센터 사업계획"></div>
+      <div class="msg" id="dMsg" role="status"></div>
+      <div style="display:flex;justify-content:flex-end"><button class="primary" type="submit" id="dSubmit">추가</button></div>
+    </form>
   </div>
 </dialog>
 

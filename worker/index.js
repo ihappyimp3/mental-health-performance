@@ -3,7 +3,8 @@
 // - 비밀번호가 설정되지 않았으면 아무것도 보여주지 않습니다(fail closed).
 // - 데이터는 Cloudflare D1(binding: DB)에 저장합니다.
 
-const DOC_KEYS = ["main", "district", "dept", "budget", "audit", "health", "center", "child", "youth", "rights"];
+const MAX_DOCS = 50;
+const normName = (v) => String(v ?? "").replace(/\s+/g, "").toLowerCase();
 const COOKIE = "mh_s";
 const SESSION_DAYS = 14;
 
@@ -112,6 +113,9 @@ async function api(request, env, url) {
   const db = env.DB;
   const m = request.method;
   const parts = url.pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
+  // 계획서 목록은 DB에서 읽는다 (코드에 고정하지 않음)
+  const docRows = (await db.prepare("SELECT key, name FROM docs ORDER BY ord, created_at").all()).results;
+  const docKeys = docRows.map((d) => d.key);
 
   // GET /api/data?year=2026
   if (parts[0] === "data" && m === "GET") {
@@ -122,13 +126,13 @@ async function api(request, env, url) {
       db.prepare("SELECT r.* FROM records r JOIN plans p ON p.id = r.plan_id WHERE p.year = ? ORDER BY r.date DESC, r.created_at DESC").bind(year).all(),
       db.prepare("SELECT DISTINCT year FROM plans").all(),
     ]);
-    return json({ plans: plans.results.map(planOut), records: records.results.map(recOut), years: years.results.map((r) => r.year) });
+    return json({ docs: docRows, plans: plans.results.map(planOut), records: records.results.map(recOut), years: years.results.map((r) => r.year) });
   }
 
   // POST /api/plans
   if (parts[0] === "plans" && parts.length === 1 && m === "POST") {
     const b = await body(request);
-    const p = cleanPlan(b);
+    const p = cleanPlan(b, docKeys);
     if (p.error) return json({ error: p.error }, 400);
     const year = toYear(b.year);
     if (!year) return json({ error: "연도가 올바르지 않습니다." }, 400);
@@ -145,7 +149,7 @@ async function api(request, env, url) {
   if (parts[0] === "plans" && parts.length === 2 && parts[1] !== "copy") {
     const id = parts[1];
     if (m === "PUT") {
-      const p = cleanPlan(await body(request));
+      const p = cleanPlan(await body(request), docKeys);
       if (p.error) return json({ error: p.error }, 400);
       const r = await db.prepare("UPDATE plans SET doc=?, name=?, calc=?, owner=?, target=?, unit=? WHERE id=?")
         .bind(p.doc, p.name, p.calc, p.owner, p.target, p.unit, id).run();
@@ -155,6 +159,27 @@ async function api(request, env, url) {
       await db.batch([db.prepare("DELETE FROM records WHERE plan_id=?").bind(id), db.prepare("DELETE FROM plans WHERE id=?").bind(id)]);
       return json({ ok: true });
     }
+  }
+
+  // POST /api/docs { name } — 계획서 추가
+  if (parts[0] === "docs" && parts.length === 1 && m === "POST") {
+    const name = str((await body(request)).name, 40);
+    if (!name) return json({ error: "계획서 이름을 입력하세요." }, 400);
+    if (docRows.length >= MAX_DOCS) return json({ error: `계획서는 최대 ${MAX_DOCS}개까지 만들 수 있습니다.` }, 400);
+    if (docRows.some((d) => normName(d.name) === normName(name))) return json({ error: "같은 이름의 계획서가 이미 있습니다." }, 409);
+    const key = "d" + crypto.randomUUID().replace(/-/g, "").slice(0, 10);
+    const ord = (await db.prepare("SELECT COALESCE(MAX(ord),-1)+1 AS n FROM docs").first()).n;
+    await db.prepare("INSERT INTO docs (key,name,ord,created_at) VALUES (?,?,?,?)").bind(key, name, ord, now()).run();
+    return json({ key }, 201);
+  }
+  // PUT /api/docs/:key { name } — 계획서 이름 수정 (지표·실적은 그대로)
+  if (parts[0] === "docs" && parts.length === 2 && m === "PUT") {
+    const key = parts[1], name = str((await body(request)).name, 40);
+    if (!docKeys.includes(key)) return json({ error: "계획서를 찾을 수 없습니다." }, 404);
+    if (!name) return json({ error: "계획서 이름을 입력하세요." }, 400);
+    if (docRows.some((d) => d.key !== key && normName(d.name) === normName(name))) return json({ error: "같은 이름의 계획서가 이미 있습니다." }, 409);
+    await db.prepare("UPDATE docs SET name=? WHERE key=?").bind(name, key).run();
+    return json({ ok: true });
   }
 
   // POST /api/plans/delete  { ids:[] } — 선택한 지표와 그 실적을 함께 삭제
@@ -195,7 +220,7 @@ async function api(request, env, url) {
     const b = await body(request);
     const year = toYear(b.year), doc = String(b.doc || "");
     const ids = Array.isArray(b.ids) ? b.ids.slice(0, 500).map(String) : [];
-    if (!year || !DOC_KEYS.includes(doc) || !ids.length) return json({ error: "순서를 바꿀 수 없습니다." }, 400);
+    if (!year || !docKeys.includes(doc) || !ids.length) return json({ error: "순서를 바꿀 수 없습니다." }, 400);
     await db.batch(ids.map((id, i) => db.prepare("UPDATE plans SET ord=? WHERE id=? AND year=? AND doc=?").bind(i, id, year, doc)));
     return json({ ok: true });
   }
@@ -204,7 +229,7 @@ async function api(request, env, url) {
   if (parts[0] === "plans" && parts[1] === "copy" && m === "POST") {
     const b = await body(request);
     const keep = !!b.keepDoc, target = String(b.doc || "");
-    if (!keep && !DOC_KEYS.includes(target)) return json({ error: "붙여넣을 계획서가 올바르지 않습니다." }, 400);
+    if (!keep && !docKeys.includes(target)) return json({ error: "붙여넣을 계획서가 올바르지 않습니다." }, 400);
     const ids = Array.isArray(b.ids) ? b.ids.slice(0, 500).map(String) : [];
     if (!ids.length) return json({ error: "복사할 지표를 선택하세요." }, 400);
     let added = 0, records = 0; const skipped = [];
@@ -261,9 +286,9 @@ async function api(request, env, url) {
 }
 
 /* ---------------- helpers ---------------- */
-function cleanPlan(b) {
+function cleanPlan(b, docKeys) {
   const doc = String(b.doc || "");
-  if (!DOC_KEYS.includes(doc)) return { error: "계획서를 선택하세요." };
+  if (!docKeys.includes(doc)) return { error: "계획서를 선택하세요." };
   const name = str(b.name, 80);
   if (!name) return { error: "지표명을 입력하세요." };
   const target = Number(b.target);

@@ -1,6 +1,6 @@
 # 정신건강사업 실적판
 
-계획서 10종(주요업무계획, 구정성과, 부서별 성과관리, 예산의 성과지표, 행정사무감사, 지역보건의료계획, 센터 계획서, 아동정책계획, 청년정책계획, 인권계획)별 성과지표의 연간 목표와 날짜별 실적을 팀이 함께 입력하고 한눈에 보는 웹 화면입니다.
+계획서(기본 10종: 주요업무계획, 구정성과, 부서별 성과관리, 예산의 성과지표, 행정사무감사, 지역보건의료계획, 센터 계획서, 아동정책계획, 청년정책계획, 인권계획 — 화면에서 추가·이름 수정 가능)별 성과지표의 연간 목표와 날짜별 실적을 팀이 함께 입력하고 한눈에 보는 웹 화면입니다.
 
 - Cloudflare Workers: 화면(정적 파일)과 `/api/*`
 - Cloudflare D1: 지표·실적 저장 (`mental-health-db`)
@@ -32,7 +32,7 @@ npm run dev     # 로컬 D1로 http://localhost:8787
 
 ## 구조
 
-- `worker/index.js` 로그인, 보안 헤더, API (`/api/data`, `/api/plans`, `/api/plans/copy`, `/api/records`)
+- `worker/index.js` 로그인, 보안 헤더, API (`/api/data`, `/api/plans`, `/api/plans/copy`, `/api/docs`, `/api/records`)
 - `public/` 화면 (`index.html`, `app.js`, `app.css`, 로그인용 `login.js`, `login.css`)
 - `migrations/` D1 스키마
 - `tests/` Worker 테스트
