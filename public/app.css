@@ -216,3 +216,4 @@ td.act .ghost{padding:4px 8px}
 .ncontent{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px 2px;min-height:80px;line-height:1.7}
 .nform{display:flex;flex-direction:column;gap:10px}
 .pinbtn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+.credit{text-align:right;font-size:.65rem;color:var(--muted);opacity:.4;margin-top:24px;user-select:none}
