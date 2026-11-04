@@ -248,7 +248,7 @@ const shell = (title, inner) => `<!doctype html><html lang="ko"><head><meta char
 
 function loginPage() {
   return shell("정신건강사업 실적판", `<main class="box">
-  <div class="eyebrow">정신건강사업 · 계획서별 지표 실적</div>
+  <div class="eyebrow">울산동구보건소 정신건강사업 계획 및 실적</div>
   <h1>실적판 로그인</h1>
   <p>팀에서 공유받은 비밀번호를 입력하세요.</p>
   <form id="f" autocomplete="off">
