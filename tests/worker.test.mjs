@@ -11,7 +11,7 @@ function makeD1() {
   for (const f of readdirSync(new URL("../migrations/", import.meta.url)).filter((x) => x.endsWith(".sql")).sort()) sql.exec(readFileSync(new URL("../migrations/" + f, import.meta.url), "utf8"));
   const stmt = (q, args = []) => ({
     bind: (...a) => stmt(q, a),
-    all: async () => ({ results: sql.prepare(q).all(...args) }),
+    all: async () => ({ results: sql.prepare(q).all(...args), meta: { size_after: globalThis.__dbSize ?? 123456 } }),
     first: async () => sql.prepare(q).get(...args) ?? null,
     run: async () => { const r = sql.prepare(q).run(...args); return { meta: { changes: Number(r.changes) } }; },
   });
@@ -312,4 +312,15 @@ test("공지사항: 등록·고정·조회수·수정·삭제", async () => {
   // 글 삭제
   assert.equal((await c("/api/notices/" + a.id, "DELETE")).status, 200);
   assert.equal((await c("/api/notices/" + a.id + "?count=0", "GET")).status, 404);
+});
+
+test("DB 용량 정보를 내려준다 (용량 경고용)", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const d = await (await call(env, "/api/data?year=2026", { cookie })).json();
+  assert.equal(d.usage.bytes, 123456); assert.equal(d.usage.limit, 500 * 1048576);
+  globalThis.__dbSize = 450 * 1048576;
+  const d2 = await (await call(env, "/api/data?year=2026", { cookie })).json();
+  assert.equal(d2.usage.bytes, 450 * 1048576);
+  delete globalThis.__dbSize;
 });

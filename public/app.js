@@ -29,6 +29,22 @@ const picked = new Set();
 let copyMsg = "", pasteYear = null, pasteDoc = null, closeAfterEdit = false;
 let loaded = false, lastSync = null;
 
+/* ---------- 저장 용량 경고 ---------- */
+const sizeDlg=$("#sizeDlg");
+$("#sizeOk").addEventListener("click", ()=>sizeDlg.close());
+function checkUsage(u){
+  if(!u||!u.bytes||!u.limit) return;
+  const ratio=u.bytes/u.limit, level=ratio>=0.95?"full":ratio>=0.8?"high":"";
+  if(!level) return;
+  let seen=false; try{ seen=sessionStorage.getItem("mh_size_"+level)==="1"; }catch(_){}
+  if(seen||sizeDlg.open) return;
+  try{ sessionStorage.setItem("mh_size_"+level,"1"); }catch(_){}
+  const mb=n=>(n/1048576).toFixed(n>=10485760?0:1);
+  $("#sizeTitle").textContent = level==="full" ? "저장 용량이 거의 가득 찼습니다" : "저장 용량이 많습니다";
+  $("#sizeMsg").textContent = `현재 ${mb(u.bytes)}MB를 사용 중입니다 (한도 ${mb(u.limit)}MB의 ${Math.round(ratio*100)}%).`;
+  sizeDlg.showModal();
+}
+
 /* ---------- 서버 통신 ---------- */
 async function api(method, path, body){
   const res = await fetch(path, { method, headers: body?{"Content-Type":"application/json"}:{}, body: body?JSON.stringify(body):undefined, credentials:"same-origin" });
@@ -46,6 +62,7 @@ async function load(){
       const d=await api("GET","/api/data?year="+y);
       if(y!==year) return;
       if(d.docs&&d.docs.length) setDocs(d.docs);
+      checkUsage(d.usage);
       const first=!loaded;
       plans=d.plans; records=d.records; knownYears=d.years||[];
       if(first) readHash(); // 새로 만든 계획서 주소(#키)로 들어온 경우를 위해, 계획서 목록을 받은 뒤 다시 읽는다

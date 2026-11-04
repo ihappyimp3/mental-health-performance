@@ -4,6 +4,7 @@
 // - 데이터는 Cloudflare D1(binding: DB)에 저장합니다.
 
 const MAX_DOCS = 50;
+const DB_LIMIT_BYTES = 500 * 1048576; // D1 데이터베이스 1개당 한도(무료 요금제 기준, 보수적으로 적용)
 const normName = (v) => String(v ?? "").replace(/\s+/g, "").toLowerCase();
 const COOKIE = "mh_s";
 const SESSION_DAYS = 14;
@@ -114,7 +115,9 @@ async function api(request, env, url) {
   const m = request.method;
   const parts = url.pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
   // 계획서 목록은 DB에서 읽는다 (코드에 고정하지 않음)
-  const docRows = (await db.prepare("SELECT key, name FROM docs ORDER BY ord, created_at").all()).results;
+  const docRes = await db.prepare("SELECT key, name FROM docs ORDER BY ord, created_at").all();
+  const docRows = docRes.results;
+  const dbBytes = Number(docRes.meta?.size_after) || null; // D1이 알려 주는 현재 DB 크기
   const docKeys = docRows.map((d) => d.key);
 
   // GET /api/data?year=2026
@@ -126,7 +129,7 @@ async function api(request, env, url) {
       db.prepare("SELECT r.* FROM records r JOIN plans p ON p.id = r.plan_id WHERE p.year = ? ORDER BY r.date DESC, r.created_at DESC").bind(year).all(),
       db.prepare("SELECT DISTINCT year FROM plans").all(),
     ]);
-    return json({ docs: docRows, plans: plans.results.map(planOut), records: records.results.map(recOut), years: years.results.map((r) => r.year) });
+    return json({ usage: { bytes: dbBytes, limit: DB_LIMIT_BYTES }, docs: docRows, plans: plans.results.map(planOut), records: records.results.map(recOut), years: years.results.map((r) => r.year) });
   }
 
   // POST /api/plans
