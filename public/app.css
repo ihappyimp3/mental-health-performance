@@ -193,3 +193,7 @@ td.act .ghost{padding:4px 8px}
 .evlist .tag.team{background:#dff0e4;color:#14612c}
 .evlist .tag.team.t2{background:#fde9d6;color:#8a3b00}
 .day .ev.t1{background:#d3efdb;color:#14612c}
+.rectbl td,.rectbl th{padding:8px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.rectbl th.r,.rectbl td.r{text-align:right}
+.rectbl .mono{font-family:var(--mono);white-space:nowrap}
+.rectbl .recnote{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere;min-width:120px}

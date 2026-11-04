@@ -101,6 +101,19 @@
       </div>
     </section>
 
+    <section class="panel" id="recPanel" hidden>
+      <div class="panel-h">
+        <h2>실적 입력 현황</h2>
+        <div class="controls">
+          <span class="hint" id="recCount"></span>
+          <select id="recDoc" aria-label="계획서 선택"></select>
+          <select id="recMonth" aria-label="월 선택"></select>
+          <select id="recSort" aria-label="정렬"><option value="dateDesc">날짜순 (최신 먼저)</option><option value="dateAsc">날짜순 (오래된 먼저)</option><option value="name">지표명순</option><option value="author">입력자 이름순</option></select>
+        </div>
+      </div>
+      <div class="panel-b" id="recWrap"></div>
+    </section>
+
     <section class="panel" id="calPanel" hidden>
       <div class="panel-h">
         <h2>일정 캘린더</h2>

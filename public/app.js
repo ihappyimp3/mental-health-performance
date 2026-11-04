@@ -62,7 +62,7 @@ setInterval(()=>{ if(document.visibilityState==="visible") load(); }, 30000);
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") load(); });
 
 /* ---------- 탭 (주소 #main 등으로 바로 열 수 있음) ---------- */
-function readHash(){ const h=location.hash.replace("#",""); curDoc = DOCMAP[h] ? h : "all"; selPlan=null; }
+function readHash(){ const h=location.hash.replace("#",""); curDoc = h==="records" ? "records" : DOCMAP[h] ? h : "all"; selPlan=null; }
 window.addEventListener("hashchange", ()=>{ readHash(); render(); loadEvents(); });
 readHash();
 
@@ -71,7 +71,7 @@ function fillYears(){
   const ys = new Set([2025,2026,2027,2028,2029,2030, ...knownYears, year]);
   $("#yearSel").innerHTML = [...ys].sort().map(y=>`<option value="${y}"${y===year?" selected":""}>${y}년</option>`).join("");
 }
-$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); pasteYear=null; selPlan=null; picked.clear(); logMonth="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; calY=year; calSel=null; events=[]; render(); load(); });
+$("#yearSel").addEventListener("change", e => { year=+e.target.value; store.set("mh_year", String(year)); pasteYear=null; selPlan=null; picked.clear(); logMonth="all"; recMonth="all"; recDoc="all"; $("#fDate").value=""; plans=[]; records=[]; loaded=false; calY=year; calSel=null; events=[]; render(); load(); });
 
 function elapsedRate(y){
   const ty=today.getFullYear();
@@ -90,7 +90,7 @@ const docOf = p => DOCMAP[p?.doc] ? p.doc : "unassigned";
 
 /* ---------- 데이터 묶음 ---------- */
 function allYearPlans(){ return plans.filter(p=>p.year===year).sort((a,b)=>(a.order??0)-(b.order??0) || String(a.name).localeCompare(b.name,"ko")); }
-function scopedPlans(){ const ps=allYearPlans(); return curDoc==="all"?ps:ps.filter(p=>docOf(p)===curDoc); }
+function scopedPlans(){ const ps=allYearPlans(); return DOCMAP[curDoc]?ps.filter(p=>docOf(p)===curDoc):ps; }
 function yearRecords(){ const pre=year+"-"; return records.filter(r=>typeof r.date==="string" && r.date.startsWith(pre)); }
 function stats(){
   // 입력값은 누적 실적이므로 합산하지 않고, 날짜가 가장 늦은(같은 날이면 나중에 입력한) 값을 최근 실적으로 쓴다.
@@ -111,20 +111,20 @@ function render(){
   const all=allYearPlans(), ps=scopedPlans(), rsAll=yearRecords();
   const pIds=new Set(ps.map(p=>p.id));
   const rs=rsAll.filter(r=>pIds.has(r.planId));
-  const isAll = curDoc==="all";
+  const isAll = curDoc==="all", isRec = curDoc==="records", isDoc = !isAll && !isRec;
 
   $("#yearTitle").textContent=year;
-  $("#docTitle").textContent = isAll ? "전체 현황" : docName(curDoc);
-  document.title = (isAll?"":docName(curDoc)+" · ")+"정신건강사업 실적판";
+  $("#docTitle").textContent = isAll ? "전체 현황" : isRec ? "실적 입력 현황" : docName(curDoc);
+  document.title = (isAll?"":(isRec?"실적 입력 현황":docName(curDoc))+" · ")+"정신건강사업 실적판";
   fillYears();
 
   const counts={}; all.forEach(p=>{ const k=docOf(p); counts[k]=(counts[k]||0)+1; });
-  const tabList=[{key:"all",name:"전체 현황"},...DOCS];
-  $("#tabs").innerHTML = tabList.map(t=>`<a href="#${t.key==="all"?"":t.key}" class="${curDoc===t.key?"on":""}"${curDoc===t.key?' aria-current="page"':""}>${esc(t.name)}${t.key!=="all"?`<span class="cnt">${counts[t.key]||0}</span>`:""}</a>`).join("");
+  const tabList=[{key:"all",name:"전체 현황"},{key:"records",name:"실적 입력 현황"},...DOCS];
+  $("#tabs").innerHTML = tabList.map(t=>`<a href="#${t.key==="all"?"":t.key}" class="${curDoc===t.key?"on":""}"${curDoc===t.key?' aria-current="page"':""}>${esc(t.name)}${t.key==="records"?`<span class="cnt">${rsAll.length}</span>`:t.key!=="all"?`<span class="cnt">${counts[t.key]||0}</span>`:""}</a>`).join("");
 
   const rates=ps.map(p=>rateOf(p,totals));
   $("#sRate").textContent = ps.length ? pct(rates.reduce((a,b)=>a+Math.min(b,100),0)/ps.length) : "–";
-  $("#sRateD").textContent = isAll ? "전체 지표 달성률 평균 (100% 상한)" : `${docName(curDoc)} 지표 평균`;
+  $("#sRateD").textContent = isDoc ? `${docName(curDoc)} 지표 평균` : "전체 지표 달성률 평균 (100% 상한)";
   $("#sElapsed").textContent = pct(el);
   $("#sElapsedD").textContent = year===today.getFullYear() ? `${today.getMonth()+1}월 ${today.getDate()}일 기준` : (year<today.getFullYear()?"종료된 연도":"아직 시작 전");
   $("#sOnTrack").textContent = ps.length ? `${rates.filter(r=>r>=el||r>=100).length} / ${ps.length}` : "–";
@@ -155,10 +155,11 @@ function render(){
     $("#docGrid").innerHTML=`<div class="docgrid">${cards}</div>`;
   }
 
-  $("#tablePanel").hidden = isAll; $("#heatPanel").hidden = isAll;
-  $("#calPanel").hidden = !isAll; $("#logPanel").hidden = isAll;
+  $("#tablePanel").hidden = !isDoc; $("#heatPanel").hidden = !isDoc;
+  $("#calPanel").hidden = !isAll; $("#logPanel").hidden = !isDoc; $("#recPanel").hidden = !isRec;
   if(isAll) renderCal();
-  if(!isAll){
+  if(isRec) renderRecs(rsAll, all);
+  if(isDoc){
     $("#tableTitle").textContent = `${docName(curDoc)} 지표별 진도`;
     const tw=$("#planTableWrap");
     if(!ps.length){
@@ -269,6 +270,36 @@ function renderLog(rs, all){
       <div><div class="val">${fmt(+r.value||0)} <span class="muted">${esc(p.unit||"")}</span></div>
       <div class="acts"><button class="ghost danger" type="button" data-del="${esc(r.id)}">삭제</button></div></div></li>`;}).join("")}</ul>${list.length>200?`<div class="hint">최근 200건만 표시합니다. 월을 선택해 좁혀 보세요.</div>`:""}`;
 }
+
+/* ---------- 실적 입력 현황 (해당 연도 전체 실적) ---------- */
+const REC_SORTS=["dateDesc","dateAsc","name","author"];
+let recSort = REC_SORTS.includes(store.get("mh_recsort")) ? store.get("mh_recsort") : "dateDesc", recMonth="all", recDoc="all";
+function renderRecs(rsAll, all){
+  const pmap=Object.fromEntries(all.map(p=>[p.id,p]));
+  setOptions($("#recDoc"), `<option value="all">전체 계획서</option>`+DOCS.map(d=>`<option value="${esc(d.key)}">${esc(d.name)}</option>`).join(""));
+  if(recDoc!=="all"&&!DOCMAP[recDoc]) recDoc="all";
+  $("#recDoc").value=recDoc;
+  setOptions($("#recMonth"), `<option value="all">전체 월</option>`+Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}월</option>`).join(""));
+  $("#recMonth").value=recMonth; $("#recSort").value=recSort;
+  let list=rsAll.filter(r=>pmap[r.planId]);
+  if(recDoc!=="all") list=list.filter(r=>docOf(pmap[r.planId])===recDoc);
+  if(recMonth!=="all") list=list.filter(r=>+r.date.slice(5,7)===+recMonth);
+  const ko=(a,b)=>String(a).localeCompare(String(b),"ko");
+  const byNew=(a,b)=>b.date.localeCompare(a.date)||(b.createdAt||"").localeCompare(a.createdAt||"");
+  if(recSort==="dateAsc") list.sort((a,b)=>-byNew(a,b));
+  else if(recSort==="name") list.sort((a,b)=>ko(pmap[a.planId].name,pmap[b.planId].name)||byNew(a,b));
+  else if(recSort==="author") list.sort((a,b)=>(!a.author-!b.author)||ko(a.author||"",b.author||"")||byNew(a,b));
+  else list.sort(byNew);
+  $("#recCount").textContent=`${year}년 · ${fmt(list.length)}건${list.length!==rsAll.length?` (전체 ${fmt(rsAll.length)}건 중)`:""}`;
+  const w=$("#recWrap");
+  if(!list.length){ w.innerHTML=`<div class="empty">${rsAll.length?"이 조건에 맞는 실적이 없습니다.":"아직 입력된 실적이 없습니다. 왼쪽에서 날짜와 실적을 입력하면 여기에 쌓입니다."}</div>`; return; }
+  w.innerHTML=`<div class="scroll"><table class="rectbl"><thead><tr><th>날짜</th><th>계획서</th><th>지표명</th><th class="r">누적 실적</th><th>입력자</th><th>내용·비고</th><th></th></tr></thead><tbody>${list.map(r=>{
+    const p=pmap[r.planId];
+    return `<tr><td class="mono">${esc(r.date)}</td><td>${esc(docName(docOf(p)))}</td><td>${esc(p.name)}</td><td class="r mono">${fmt(+r.value||0)}${p.unit?` <span class="muted">${esc(p.unit)}</span>`:""}</td><td>${esc(r.author||"")}</td><td class="recnote">${esc(r.note||"")}</td><td class="r"><button class="ghost danger" type="button" data-del="${esc(r.id)}">삭제</button></td></tr>`;}).join("")}</tbody></table></div>`;
+}
+$("#recDoc").addEventListener("change", e=>{ recDoc=e.target.value; render(); });
+$("#recMonth").addEventListener("change", e=>{ recMonth=e.target.value; render(); });
+$("#recSort").addEventListener("change", e=>{ recSort=e.target.value; store.set("mh_recsort", recSort); render(); });
 
 /* ---------- 일정 캘린더 (전체 현황) ---------- */
 let events=[], calY=year, calM=today.getMonth()+1, calSel=null, calKey="";
@@ -461,9 +492,9 @@ function renderYearCopy(){
   if(ycYearSel===null || !ys.includes(ycYearSel)) ycYearSel = ys.includes(year+1) ? year+1 : ys[0];
   $("#ycYear").innerHTML=ys.map(y=>`<option value="${y}"${y===ycYearSel?" selected":""}>${y}년</option>`).join("");
   const opts=[`<option value="all">${year}년 전체 계획서 (${all.length}개)</option>`];
-  if(curDoc!=="all") opts.push(`<option value="cur">${esc(docName(curDoc))}만 (${scoped.length}개)</option>`);
+  if(DOCMAP[curDoc]) opts.push(`<option value="cur">${esc(docName(curDoc))}만 (${scoped.length}개)</option>`);
   const prev=$("#ycScope").value;
-  $("#ycScope").innerHTML=opts.join(""); if(prev==="cur"&&curDoc!=="all") $("#ycScope").value="cur";
+  $("#ycScope").innerHTML=opts.join(""); if(prev==="cur"&&DOCMAP[curDoc]) $("#ycScope").value="cur";
   $("#ycHint").textContent=`지금 보고 있는 ${year}년 지표를 다른 연도로 복사합니다. 계획서·산출내역·목표·단위·담당이 그대로 복사되고 순서도 유지됩니다. 날짜별 실적은 복사하지 않고, 이미 있는 지표는 건너뜁니다.`;
   $("#ycBtn").disabled=!all.length;
 }
@@ -483,14 +514,14 @@ $("#yearCopyForm").addEventListener("submit", async e=>{
 });
 function renderPlanList(){
   const all=allYearPlans(), w=$("#planListWrap");
-  const groups = curDoc==="all" ? DOCS.map(d=>d.key) : [curDoc];
+  const groups = DOCMAP[curDoc] ? [curDoc] : DOCS.map(d=>d.key);
   let html="", n=0;
   groups.forEach(k=>{
     const ps=all.filter(p=>docOf(p)===k); if(!ps.length) return; n+=ps.length;
-    if(curDoc==="all") html+=`<li class="grp">${esc(docName(k))}</li>`;
+    if(!DOCMAP[curDoc]) html+=`<li class="grp">${esc(docName(k))}</li>`;
     html+=ps.map((p,i)=>`<li><div class="lft"><input type="checkbox" class="pick" id="dpick-${esc(p.id)}" data-pick="${esc(p.id)}" aria-label="${esc(p.name)} 선택"${picked.has(p.id)?" checked":""}><div><div class="pname">${esc(p.name)}</div><div class="pcat">목표 ${fmt(p.target||0)}${esc(p.unit||"")}${p.owner?` · 담당 ${esc(p.owner)}`:""}</div>${p.calc?`<div class="pcat">산출내역: ${esc(p.calc)}</div>`:""}</div></div><div style="display:flex;gap:2px;flex-shrink:0"><button class="ghost mv" type="button" data-pmove="${esc(p.id)}:-1" aria-label="${esc(p.name)} 위로 이동" title="위로"${i===0?" disabled":""}>▲</button><button class="ghost mv" type="button" data-pmove="${esc(p.id)}:1" aria-label="${esc(p.name)} 아래로 이동" title="아래로"${i===ps.length-1?" disabled":""}>▼</button><button class="ghost" type="button" data-pedit="${esc(p.id)}">수정</button><button class="ghost danger" type="button" data-pdel="${esc(p.id)}">삭제</button></div></li>`).join("");
   });
-  const scope = curDoc==="all" ? `${year}년 전체 지표` : `${year}년 ${docName(curDoc)} 지표`;
+  const scope = DOCMAP[curDoc] ? `${year}년 ${docName(curDoc)} 지표` : `${year}년 전체 지표`;
   w.innerHTML = n ? `<div class="eyebrow">${esc(scope)} (${n})</div><div class="hint">▲▼로 순서를 바꾸고, 체크하면 다른 계획서에 붙여넣을 수 있습니다.</div><ul class="planlist">${html}</ul>` : `<div class="hint">${esc(scope)}가 아직 없습니다.</div>`;
   renderCopyBars();
   renderYearCopy();
