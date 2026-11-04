@@ -23,7 +23,7 @@ let year = (()=>{ const y=+(store.get("mh_year")||0); return y>=2025&&y<=2030 ? 
 let curDoc = "all";
 let selPlan = null, logMonth = "all", editingPlan = null;
 const picked = new Set();
-let copyMsg = "", pasteYear = null, pasteDoc = null;
+let copyMsg = "", pasteYear = null, pasteDoc = null, closeAfterEdit = false;
 let loaded = false, lastSync = null;
 
 /* ---------- 서버 통신 ---------- */
@@ -154,7 +154,7 @@ function render(){
       tw.innerHTML=`<div class="empty"><strong>${year}년 ${esc(docName(curDoc))} 지표가 아직 없습니다.</strong><span>계획서에 있는 성과지표와 연간 목표를 등록하면 날짜별 실적을 입력할 수 있어요.</span><button class="primary" type="button" data-act="openPlans">지표 추가</button></div>`;
     } else {
       const allPicked = ps.every(p=>picked.has(p.id));
-      tw.innerHTML=`<table><thead><tr><th class="dh" aria-label="순서"></th><th class="pk"><input type="checkbox" class="pick" id="pickAll" data-pickall aria-label="이 계획서 지표 모두 선택"${allPicked?" checked":""}></th><th>지표명</th><th class="r">연간 목표</th><th class="r">최근 실적</th><th>달성률</th><th class="r"></th><th>상태</th></tr></thead><tbody>${
+      tw.innerHTML=`<table><thead><tr><th class="dh" aria-label="순서"></th><th class="pk"><input type="checkbox" class="pick" id="pickAll" data-pickall aria-label="이 계획서 지표 모두 선택"${allPicked?" checked":""}></th><th>지표명</th><th class="r">연간 목표</th><th class="r">최근 실적</th><th>달성률</th><th class="r"></th><th>상태</th><th class="act"></th></tr></thead><tbody>${
         ps.map((p,i)=>{ const r=rates[i], [cls,lab]=status(r,el,!!last[p.id]);
           return `<tr class="row${selPlan===p.id?" sel":""}" data-plan="${esc(p.id)}" tabindex="0" title="이 지표의 실적만 보기">
             <td class="dh" draggable="true" title="끌어서 순서 바꾸기" aria-hidden="true">⠿</td>
@@ -164,7 +164,8 @@ function render(){
             <td class="r num">${last[p.id]?`${fmt(totals[p.id]||0)} <span class="muted">${esc(p.unit||"")}</span><div class="pcat">${last[p.id].slice(5).replace("-","/")} 입력</div>`:`<span class="muted">–</span>`}</td>
             <td><div class="prog" role="img" aria-label="달성률 ${pct(r)}, 경과율 ${pct(el)}"><div class="fill" style="width:${Math.min(r,100)}%"></div><div class="mark" style="left:calc(${Math.min(el,100)}% - 1px)"></div></div></td>
             <td class="r num">${p.target>0?pct(r):"목표 없음"}</td>
-            <td><span class="pill ${cls}">${lab}</span></td></tr>`; }).join("")
+            <td><span class="pill ${cls}">${lab}</span></td>
+            <td class="act"><button class="ghost" type="button" data-pedit="${esc(p.id)}" aria-label="${esc(p.name)} 수정">수정</button><button class="ghost danger" type="button" data-pdel="${esc(p.id)}" aria-label="${esc(p.name)} 삭제">삭제</button></td></tr>`; }).join("")
       }</tbody></table>`;
     }
     const hw=$("#heatWrap");
@@ -267,7 +268,7 @@ document.addEventListener("click", e=>{
   if(act==="openPlans"){ openPlans(); return; }
   if(act==="clearSel"){ selPlan=null; render(); return; }
   const row=e.target.closest("tr.row");
-  if(row){ selPlan=selPlan===row.dataset.plan?null:row.dataset.plan; render(); return; }
+  if(row && !e.target.closest("button,a,input,select,label")){ selPlan=selPlan===row.dataset.plan?null:row.dataset.plan; render(); return; }
   const del=e.target.closest("[data-del]");
   if(del) confirmThen(del, async()=>{ try{ await api("DELETE","/api/records/"+encodeURIComponent(del.dataset.del)); await load(); }catch(err){ flash("삭제하지 못했습니다: "+err.message,true); } });
   const pdel=e.target.closest("[data-pdel]");
@@ -275,13 +276,16 @@ document.addEventListener("click", e=>{
     const id=pdel.dataset.pdel, n=records.filter(r=>r.planId===id).length;
     confirmThen(pdel, async()=>{
       try{ await api("DELETE","/api/plans/"+encodeURIComponent(id)); if(selPlan===id) selPlan=null; picked.delete(id); await load(); }
-      catch(err){ $("#pMsg").className="msg err"; $("#pMsg").textContent="삭제하지 못했습니다: "+err.message; }
+      catch(err){ $("#pMsg").className="msg err"; $("#pMsg").textContent="삭제하지 못했습니다: "+err.message; flash("삭제하지 못했습니다: "+err.message,true); }
     }, n?`실적 ${n}건도 삭제`:"삭제 확인");
   }
   const mv=e.target.closest("[data-pmove]");
   if(mv){ const [id,d]=mv.dataset.pmove.split(":"); movePlans([id],+d, mv.dataset.pmove); return; }
   const pedit=e.target.closest("[data-pedit]");
-  if(pedit) startEditPlan(pedit.dataset.pedit);
+  if(pedit){
+    if(!dlg.open){ resetPlanForm(); renderPlanList(); dlg.showModal(); closeAfterEdit=true; }
+    startEditPlan(pedit.dataset.pedit);
+  }
 });
 document.addEventListener("keydown", e=>{ if((e.key==="Enter"||e.key===" ")&&e.target.matches("tr.row")){ e.preventDefault(); e.target.click(); } });
 function confirmThen(btn, fn, label="삭제 확인"){
@@ -321,6 +325,7 @@ $("#pDoc").innerHTML = DOCS.map(d=>`<option value="${d.key}">${esc(d.name)}</opt
 function openPlans(){ resetPlanForm(); renderPlanList(); dlg.showModal(); $("#pName").focus(); }
 $("#managePlans").addEventListener("click", openPlans);
 dlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.target===dlg) dlg.close(); });
+dlg.addEventListener("close", ()=>{ closeAfterEdit=false; });
 function renderPlanList(){
   const all=allYearPlans(), w=$("#planListWrap");
   const groups = curDoc==="all" ? DOCS.map(d=>d.key) : [curDoc];
@@ -356,6 +361,7 @@ $("#planForm").addEventListener("submit", async e=>{
     else await api("POST","/api/plans", {...data, year});
     const t = editingPlan?"수정했습니다.":`${docName(data.doc)}에 '${data.name}' 추가했습니다.`;
     await load();
+    if(editingPlan && closeAfterEdit){ dlg.close(); copyMsg="지표를 수정했습니다."; render(); return; }
     resetPlanForm(); $("#pDoc").value=data.doc; m.className="msg ok"; m.textContent=t; $("#pName").focus();
   }catch(err){ m.className="msg err"; m.textContent="저장하지 못했습니다: "+err.message; }
   finally{ btn.disabled=false; }
@@ -465,7 +471,7 @@ bulkDlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.ta
 function editSelected(){
   const ids=[...picked]; if(!ids.length) return;
   if(ids.length===1){
-    if(!dlg.open){ resetPlanForm(); renderPlanList(); dlg.showModal(); }
+    if(!dlg.open){ resetPlanForm(); renderPlanList(); dlg.showModal(); closeAfterEdit=true; }
     startEditPlan(ids[0]); return;
   }
   $("#bulkTitle").textContent=`지표 ${ids.length}개 한꺼번에 수정`;
