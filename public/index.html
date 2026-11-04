@@ -171,12 +171,14 @@
   <div class="db">
     <form id="evForm" autocomplete="off" style="display:flex;flex-direction:column;gap:10px">
       <div class="field"><label for="eName">프로그램명</label><input id="eName" required maxlength="80"></div>
+      <div class="field"><label for="eTeam">팀명</label><select id="eTeam"><option value="">선택 안 함</option><option value="통정팀">통정팀</option><option value="자살팀">자살팀</option></select></div>
       <div class="field-row">
-        <div class="field"><label for="eDate">일시 (날짜)</label><input type="date" id="eDate" required></div>
-        <div class="field-row">
-          <div class="field"><label for="eStart">시작</label><input type="time" id="eStart"></div>
-          <div class="field"><label for="eEnd">종료</label><input type="time" id="eEnd"></div>
-        </div>
+        <div class="field"><label for="eDate">시작일</label><input type="date" id="eDate" required></div>
+        <div class="field"><label for="eStart">시작 시간</label><input type="time" id="eStart"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="eEndDate">종료일</label><input type="date" id="eEndDate"></div>
+        <div class="field"><label for="eEnd">종료 시간</label><input type="time" id="eEnd"></div>
       </div>
       <div class="field"><label for="ePlace">장소</label><input id="ePlace" maxlength="80"></div>
       <div class="field-row">

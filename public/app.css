@@ -189,3 +189,6 @@ td.act .ghost{padding:4px 8px}
 .evlist .acts{display:flex;gap:2px;align-items:flex-start}
 .calhead{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.85rem;font-weight:600}
 @media (max-width:560px){.day{min-height:56px}.day .ev{font-size:.62rem}}
+.day .ev.t2{background:#fde9d6;color:#8a3b00}
+.evlist .tag.team{background:#dff0e4;color:#14612c}
+.evlist .tag.team.t2{background:#fde9d6;color:#8a3b00}

@@ -281,23 +281,35 @@ async function loadEvents(){
     events=d.events||[]; calKey=key; renderCal();
   }catch(err){ flash("일정을 불러오지 못했습니다: "+err.message,true); }
 }
-const evTime=e=>e.start?(e.end?`${e.start}~${e.end}`:e.start):"";
+const md=d=>d.slice(5).replace("-","/");
+function evTime(e){
+  const ed=e.endDate&&e.endDate!==e.date?e.endDate:"";
+  if(ed) return `${md(e.date)}${e.start?" "+e.start:""} ~ ${md(ed)}${e.end?" "+e.end:""}`;
+  return e.start?(e.end?`${e.start}~${e.end}`:e.start):"";
+}
+const evLast=e=>e.endDate&&e.endDate>e.date?e.endDate:e.date;
+const teamCls=t=>t==="자살팀"?" t2":t==="통정팀"?" t1":"";
 function renderCal(){
   const {start,end}=calRange();
   $("#calTitle").textContent=`${calY}년 ${calM}월`;
-  const by={}; events.forEach(e=>(by[e.date]=by[e.date]||[]).push(e));
+  const by={};
+  events.forEach(e=>{ // 여러 날 일정은 기간의 모든 날짜에 표시
+    const [y,m,d]=e.date.split("-").map(Number), last=evLast(e);
+    for(let i=0;i<62;i++){ const t=new Date(y,m-1,d+i), ds=dstr(t.getFullYear(),t.getMonth()+1,t.getDate()); if(ds>last) break; (by[ds]=by[ds]||[]).push(e); }
+  });
   let cells=WD.map(w=>`<div class="wd">${w}</div>`).join("");
   for(let d=new Date(start); d<=end; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){
     const ds=dstr(d.getFullYear(),d.getMonth()+1,d.getDate()), list=by[ds]||[];
-    cells+=`<button type="button" class="day${d.getMonth()+1!==calM?" out":""}${ds===todayStr?" today":""}${ds===calSel?" sel":""}" data-day="${ds}" aria-label="${ds} 일정 ${list.length}건"><span class="dn">${d.getDate()}</span>${list.slice(0,2).map(e=>`<span class="ev" title="${esc(e.name)}">${esc(e.name)}</span>`).join("")}${list.length>2?`<span class="more">+${list.length-2}건</span>`:""}</button>`;
+    cells+=`<button type="button" class="day${d.getMonth()+1!==calM?" out":""}${ds===todayStr?" today":""}${ds===calSel?" sel":""}" data-day="${ds}" aria-label="${ds} 일정 ${list.length}건"><span class="dn">${d.getDate()}</span>${list.slice(0,2).map(e=>`<span class="ev${teamCls(e.team)}" title="${esc((e.team?e.team+" · ":"")+e.name)}">${esc(e.name)}</span>`).join("")}${list.length>2?`<span class="more">+${list.length-2}건</span>`:""}</button>`;
   }
   $("#calGrid").innerHTML=`<div class="calgrid">${cells}</div>`;
-  const inMonth=events.filter(e=>+e.date.slice(5,7)===calM && +e.date.slice(0,4)===calY);
-  const shown=calSel?events.filter(e=>e.date===calSel):inMonth;
+  const mFirst=dstr(calY,calM,1), mLast=dstr(calY,calM,new Date(calY,calM,0).getDate());
+  const inMonth=events.filter(e=>e.date<=mLast && evLast(e)>=mFirst);
+  const shown=calSel?events.filter(e=>e.date<=calSel && evLast(e)>=calSel):inMonth;
   const head=calSel?`<span>${esc(calSel)} 일정 ${shown.length}건</span><button type="button" class="ghost" data-cal="all">${calM}월 전체 보기</button>`:`<span>${calM}월 일정 ${shown.length}건</span>`;
   $("#calList").innerHTML=`<div class="calhead">${head}</div>`+(shown.length?`<ul class="evlist">${shown.map(e=>{
     const meta=[evTime(e),e.place,e.target&&`대상 ${e.target}`,e.headcount!=null&&`${e.headcount}명`,e.owner&&`담당 ${e.owner}`].filter(Boolean).map(esc).join(" · ");
-    return `<li><div><div class="t">${calSel?"":`<span class="tag">${esc(e.date.slice(5))}</span>`}${esc(e.name)}</div>${meta?`<div class="m">${meta}</div>`:""}${e.content?`<div class="m">${esc(e.content)}</div>`:""}</div><div class="acts"><button class="ghost" type="button" data-evedit="${esc(e.id)}">수정</button><button class="ghost danger" type="button" data-evdel="${esc(e.id)}">삭제</button></div></li>`;}).join("")}</ul>`:`<div class="empty">${calSel?"이 날짜에 등록된 일정이 없습니다.":"이 달에 등록된 일정이 없습니다."} 「일정 추가」로 등록하세요.</div>`);
+    return `<li><div><div class="t"><span class="tag">${esc(md(e.date))}</span>${e.team?`<span class="tag team${teamCls(e.team)}">${esc(e.team)}</span>`:""}${esc(e.name)}</div>${meta?`<div class="m">${meta}</div>`:""}${e.content?`<div class="m">${esc(e.content)}</div>`:""}</div><div class="acts"><button class="ghost" type="button" data-evedit="${esc(e.id)}">수정</button><button class="ghost danger" type="button" data-evdel="${esc(e.id)}">삭제</button></div></li>`;}).join("")}</ul>`:`<div class="empty">${calSel?"이 날짜에 등록된 일정이 없습니다.":"이 달에 등록된 일정이 없습니다."} 「일정 추가」로 등록하세요.</div>`);
 }
 function calGo(y,m){ calY=y; calM=m; calSel=null; events=[]; renderCal(); loadEvents(); }
 const evDlg=$("#evDlg"); let editingEv=null;
@@ -306,7 +318,7 @@ function openEvDlg(id){
   const ev=id&&events.find(x=>x.id===id); editingEv=ev?ev.id:null;
   $("#evForm").reset(); $("#eMsg").textContent="";
   $("#evDlgTitle").textContent=ev?"일정 수정":"일정 추가"; $("#eSubmit").textContent=ev?"수정 저장":"추가";
-  $("#eName").value=ev?ev.name:""; $("#eDate").value=ev?ev.date:(calSel||(calY===today.getFullYear()&&calM===today.getMonth()+1?todayStr:dstr(calY,calM,1)));
+  $("#eTeam").value=ev?ev.team:""; $("#eEndDate").value=ev?(ev.endDate||""):""; $("#eName").value=ev?ev.name:""; $("#eDate").value=ev?ev.date:(calSel||(calY===today.getFullYear()&&calM===today.getMonth()+1?todayStr:dstr(calY,calM,1)));
   $("#eStart").value=ev?ev.start:""; $("#eEnd").value=ev?ev.end:""; $("#ePlace").value=ev?ev.place:"";
   $("#eTarget").value=ev?ev.target:""; $("#eCount").value=ev&&ev.headcount!=null?ev.headcount:""; $("#eContent").value=ev?ev.content:"";
   $("#eOwner").value=ev?ev.owner:(store.get("mh_author")||"");
@@ -315,7 +327,7 @@ function openEvDlg(id){
 $("#evForm").addEventListener("submit", async e=>{
   e.preventDefault();
   const m=$("#eMsg"), btn=$("#eSubmit"); btn.disabled=true;
-  const body={name:$("#eName").value.trim(),date:$("#eDate").value,start:$("#eStart").value,end:$("#eEnd").value,place:$("#ePlace").value.trim(),target:$("#eTarget").value.trim(),headcount:$("#eCount").value,content:$("#eContent").value.trim(),owner:$("#eOwner").value.trim()};
+  const body={name:$("#eName").value.trim(),team:$("#eTeam").value,date:$("#eDate").value,endDate:$("#eEndDate").value,start:$("#eStart").value,end:$("#eEnd").value,place:$("#ePlace").value.trim(),target:$("#eTarget").value.trim(),headcount:$("#eCount").value,content:$("#eContent").value.trim(),owner:$("#eOwner").value.trim()};
   try{
     if(editingEv) await api("PUT","/api/events/"+encodeURIComponent(editingEv),body); else await api("POST","/api/events",body);
     evDlg.close();

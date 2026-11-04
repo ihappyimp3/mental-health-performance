@@ -268,3 +268,20 @@ test("일정 추가·수정·삭제", async () => {
   assert.equal((await list()).length, 0);
   assert.equal((await call(env, "/api/events?from=bad&to=bad", { cookie })).status, 400);
 });
+
+test("일정: 팀명·시작/종료일", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const post = (body) => call(env, "/api/events", { method: "POST", body, cookie });
+  const list = async (f, t) => (await (await call(env, `/api/events?from=${f}&to=${t}`, { cookie })).json()).events;
+  assert.equal((await post({ name: "x", date: "2026-11-10", team: "없는팀" })).status, 400);
+  assert.equal((await post({ name: "x", date: "2026-11-10", endDate: "2026-11-09" })).status, 400);
+  assert.equal((await post({ name: "x", date: "2026-11-10", endDate: "2026-11-10", start: "10:00", end: "09:00" })).status, 400);
+  assert.equal((await post({ name: "연수", team: "자살팀", date: "2026-10-30", start: "09:00", endDate: "2026-11-03", end: "18:00" })).status, 201);
+  assert.equal((await post({ name: "당일", team: "통정팀", date: "2026-11-10", endDate: "2026-11-10", start: "10:00", end: "12:00" })).status, 201);
+  // 시작은 지난 달이어도 기간이 걸친 달에는 나온다
+  const nov = await list("2026-11-01", "2026-11-30");
+  assert.deepEqual(nov.map((e) => e.name), ["연수", "당일"]);
+  assert.equal(nov[0].team, "자살팀"); assert.equal(nov[0].endDate, "2026-11-03"); assert.equal(nov[1].endDate, "");
+  assert.equal((await list("2026-11-04", "2026-11-30")).length, 1);
+});
