@@ -1,23 +1,13 @@
 /* Layout: 상단 요약 → 계획서 탭 → (전체: 계획서 카드 / 계획서: 지표 진도표 + 월별 히트맵) → 입력 패널 + 날짜별 기록 */
 html{color-scheme:light}
 :root{
-  --bg:#f5f7f6; --surface:#ffffff; --surface-2:#eef2f0; --line:#d9e1dd;
-  --fg:#1d2a26; --muted:#5d6e68; --accent:#2f6f62; --accent-soft:#d7e8e3;
-  --ok:#2e7d4f; --ok-soft:#dcefe2; --warn:#a96a12; --warn-soft:#f6e8cf; --bad:#b0412e; --bad-soft:#f5dcd6;
-  --heat:47,111,98;
+  --bg:#bfe3f8; --surface:#e8f5fd; --surface-2:#d3ebfa; --line:#8fc3e6;
+  --fg:#0a2463; --muted:#2b4a8c; --accent:#0b4aa8; --accent-soft:#b3d7f3;
+  --ok:#14663a; --ok-soft:#c9ead6; --warn:#8a5200; --warn-soft:#f3e1b8; --bad:#a3301d; --bad-soft:#f6d3cb;
+  --heat:11,74,168;
   --sans:"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
   --mono:Consolas,"D2Coding",ui-monospace,"SFMono-Regular",monospace;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#121816; --surface:#19211e; --surface-2:#202a26; --line:#2e3a35;
-  --fg:#e3ebe7; --muted:#93a59e; --accent:#7cc0ae; --accent-soft:#24423a;
-  --ok:#6fc48f; --ok-soft:#1f3a2a; --warn:#e2ad5a; --warn-soft:#3d3020; --bad:#ec8a77; --bad-soft:#40241f;
-  --heat:124,192,174; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#121816; --surface:#19211e; --surface-2:#202a26; --line:#2e3a35;
-  --fg:#e3ebe7; --muted:#93a59e; --accent:#7cc0ae; --accent-soft:#24423a;
-  --ok:#6fc48f; --ok-soft:#1f3a2a; --warn:#e2ad5a; --warn-soft:#3d3020; --bad:#ec8a77; --bad-soft:#40241f;
-  --heat:124,192,174; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.55}
 .wrap{max-width:1180px;margin:0 auto;padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:20px}
