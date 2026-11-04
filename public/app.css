@@ -41,11 +41,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .tabs a .cnt{font-family:var(--mono);font-size:.72rem;background:var(--surface-2);color:var(--muted);border-radius:999px;padding:0 6px}
 .tabs a.on .cnt{background:var(--accent-soft);color:var(--accent)}
 
-.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start}
+.toprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.toprow{grid-template-columns:minmax(0,1fr)}}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:4px}
 .stat .v{font-size:1.65rem;font-weight:600;font-family:var(--mono);font-variant-numeric:tabular-nums;line-height:1.2}
 .stat .d{font-size:.8rem;color:var(--muted)}
-@media (max-width:760px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:8px}
 .panel-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line)}
@@ -199,10 +200,10 @@ td.act .ghost{padding:4px 8px}
 .rectbl .recnote{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere;min-width:120px}
 
 /* 공지사항 */
-#noticePanel{margin-bottom:16px}
 #noticePanel .cnt{font-family:var(--mono);font-size:.72rem;background:var(--surface-2);color:var(--muted);border-radius:999px;padding:0 7px;font-weight:500;vertical-align:2px}
 .nbar{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-.ntbl td,.ntbl th{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.ntbl{font-size:.84rem}
+.ntbl td,.ntbl th{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
 .ntbl th.c,.ntbl td.c{text-align:center;white-space:nowrap}
 .ntbl .ttl{width:100%}
 .ntbl .ttl button{all:unset;cursor:pointer;font-weight:600;color:var(--fg);overflow-wrap:anywhere}
@@ -213,8 +214,5 @@ td.act .ghost{padding:4px 8px}
 .nmeta{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 16px;font-size:.84rem;color:var(--muted);padding-bottom:10px;border-bottom:1px solid var(--line)}
 .nmeta b{color:var(--fg);font-weight:600}
 .ncontent{white-space:pre-wrap;overflow-wrap:anywhere;padding:14px 2px;min-height:80px;line-height:1.7}
-.nfiles{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px;font-size:.88rem}
-.nfiles .fl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.nfiles button.dl{color:var(--accent);border-color:var(--line);padding:3px 10px}
 .nform{display:flex;flex-direction:column;gap:10px}
 .pinbtn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}

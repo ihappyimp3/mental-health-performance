@@ -126,9 +126,6 @@ function render(){
   const rates=ps.map(p=>rateOf(p,totals));
   $("#sRate").textContent = ps.length ? pct(rates.reduce((a,b)=>a+Math.min(b,100),0)/ps.length) : "–";
   $("#sRateD").textContent = isDoc ? `${docName(curDoc)} 지표 평균` : "전체 지표 달성률 평균 (100% 상한)";
-  $("#sElapsed").textContent = pct(el);
-  $("#sElapsedD").textContent = year===today.getFullYear() ? `${today.getMonth()+1}월 ${today.getDate()}일 기준` : (year<today.getFullYear()?"종료된 연도":"아직 시작 전");
-  $("#sOnTrack").textContent = ps.length ? `${rates.filter(r=>r>=el||r>=100).length} / ${ps.length}` : "–";
   const curM = year===today.getFullYear()? today.getMonth()+1 : null;
   $("#sMonth").textContent = curM ? fmt(rs.filter(r=>+r.date.slice(5,7)===curM).length)+"건" : "–";
   $("#sMonthD").textContent = curM ? `${curM}월 실적 기록 건수` : "올해에만 표시됩니다";
@@ -273,11 +270,9 @@ function renderLog(rs, all){
 }
 
 /* ---------- 공지사항 ---------- */
-const MAX_FILE=3*1048576, MAX_FILES=5, CHUNK=500000;
-let notices=[], nView="list", nCur=null, nShown=10, nEditing=null, nPinned=false, nNew=[], nRemove=new Set(), nOpen=store.get("mh_notice_open")!=="0";
+let notices=[], nView="list", nCur=null, nShown=10, nEditing=null, nPinned=false, nOpen=store.get("mh_notice_open")!=="0";
 const fdt=iso=>{ const d=new Date(iso); return isNaN(d)?"":`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
 const fdtm=iso=>{ const d=new Date(iso); return isNaN(d)?"":`${fdt(iso)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-const fsize=n=>n>=1048576?(n/1048576).toFixed(1)+"MB":Math.max(1,Math.round(n/1024))+"KB";
 const edited=n=>n.updatedAt&&n.updatedAt!==n.createdAt;
 async function loadNotices(){
   try{ const d=await api("GET","/api/notices"); notices=d.notices||[]; if(nView==="list") renderNotice(); else $("#noticeCnt").textContent=notices.length; }
@@ -291,21 +286,15 @@ function renderNotice(){
     const n=nCur;
     body.innerHTML=`<article class="ndetail"><h3>${n.pinned?`<span class="pinmark">고정</span>`:""}${esc(n.title)}</h3>
       <div class="nmeta"><span>작성자 <b>${esc(n.author||"-")}</b></span><span>조회수 <b>${fmt(n.views)}</b></span><span>등록일자 <b>${esc(fdtm(n.createdAt))}</b></span><span>수정일자 <b>${edited(n)?esc(fdtm(n.updatedAt)):"-"}</b></span></div>
-      <div class="ncontent">${n.content?esc(n.content):`<span class="muted">내용이 없습니다.</span>`}</div>
-      <div class="nfiles"><strong>첨부파일</strong>${n.files.length?n.files.map(f=>`<div class="fl"><button class="dl" type="button" data-nfile="${esc(f.id)}">내려받기</button><span>${esc(f.name)}</span><span class="muted">(${fsize(f.size)})</span></div>`).join(""):`<span class="muted">첨부파일 없음</span>`}</div></article>
+      <div class="ncontent">${n.content?esc(n.content):`<span class="muted">내용이 없습니다.</span>`}</div></article>
       <div class="nbar"><button type="button" data-n="new">입력</button><button type="button" data-n="edit">수정</button><button type="button" class="danger" data-n="del">삭제</button><button type="button" data-n="list">목록</button></div>`;
     return;
   }
   if(nView==="form"){
-    const ex=nEditing?(nCur.files||[]).filter(f=>!nRemove.has(f.id)):[];
     body.innerHTML=`<form class="nform" id="noticeForm" autocomplete="off">
       <div class="field"><label for="nTitle">제목</label><input id="nTitle" required maxlength="100" value="${esc(nEditing?nCur.title:"")}"></div>
       <div class="field"><label for="nAuthor">작성자</label><input id="nAuthor" maxlength="30" value="${esc(nEditing?nCur.author:(store.get("mh_author")||""))}"></div>
-      <div class="field"><label for="nContent">내용</label><textarea id="nContent" rows="8" maxlength="5000" placeholder="개인정보(대상자 이름 등)는 적지 마세요">${esc(nEditing?nCur.content:"")}</textarea></div>
-      <div class="field"><label for="nFiles">첨부파일 <span class="muted">(파일당 ${MAX_FILE/1048576}MB 이하, 최대 ${MAX_FILES}개)</span></label>
-        ${nEditing?(nCur.files||[]).map(f=>`<div class="fl"><label><input type="checkbox" data-nrm="${esc(f.id)}"${nRemove.has(f.id)?" checked":""}> 삭제</label> <span${nRemove.has(f.id)?' style="text-decoration:line-through"':""}>${esc(f.name)}</span> <span class="muted">(${fsize(f.size)})</span></div>`).join(""):""}
-        <input type="file" id="nFiles" multiple>
-        <div class="muted" id="nPicked">${nNew.length?nNew.map(f=>esc(f.name)+" ("+fsize(f.size)+")").join(", "):""}</div></div>
+      <div class="field"><label for="nContent">내용</label><textarea id="nContent" rows="6" maxlength="5000" placeholder="개인정보(대상자 이름 등)는 적지 마세요">${esc(nEditing?nCur.content:"")}</textarea></div>
       <div><button type="button" class="pinbtn" id="nPin" aria-pressed="${nPinned}" data-n="pin">📌 게시글 상단 고정</button></div>
       <div class="msg" id="nMsg" role="status"></div>
       <div class="nbar"><button type="submit" class="primary" id="nSave">${nEditing?"수정 저장":"등록"}</button><button type="button" data-n="list">목록</button></div></form>`;
@@ -313,55 +302,31 @@ function renderNotice(){
   }
   // 목록
   const shown=notices.slice(0,nShown);
-  const nums={}; notices.filter(x=>!x.pinned).forEach((x,i,arr)=>{ nums[x.id]=arr.length-i; });
-  body.innerHTML=(notices.length?`<div class="scroll"><table class="ntbl"><thead><tr><th class="c">번호</th><th class="ttl">제목</th><th class="c">작성자</th><th class="c">등록일자</th><th class="c">수정일자</th><th class="c">조회수</th></tr></thead><tbody>${shown.map(n=>`<tr class="${n.pinned?"pin":""}"><td class="c">${n.pinned?"📌":nums[n.id]}</td><td class="ttl">${n.pinned?`<span class="pinmark">고정</span>`:""}<button type="button" data-nopen="${esc(n.id)}">${esc(n.title)}</button>${n.files?` <span title="첨부파일 ${n.files}개">📎</span>`:""}</td><td class="c">${esc(n.author||"-")}</td><td class="c">${esc(fdt(n.createdAt))}</td><td class="c">${edited(n)?esc(fdt(n.updatedAt)):"-"}</td><td class="c">${fmt(n.views)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">등록된 공지사항이 없습니다.</div>`)
+  body.innerHTML=(notices.length?`<div class="scroll"><table class="ntbl"><thead><tr><th class="ttl">제목</th><th class="c">작성자</th><th class="c">등록일자</th><th class="c">수정일자</th><th class="c">조회수</th></tr></thead><tbody>${shown.map(n=>`<tr class="${n.pinned?"pin":""}"><td class="ttl">${n.pinned?`<span class="pinmark">고정</span>`:""}<button type="button" data-nopen="${esc(n.id)}">${esc(n.title)}</button></td><td class="c">${esc(n.author||"-")}</td><td class="c">${esc(fdt(n.createdAt))}</td><td class="c">${edited(n)?esc(fdt(n.updatedAt)):"-"}</td><td class="c">${fmt(n.views)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">등록된 공지사항이 없습니다.</div>`)
     +`<div class="nbar">${notices.length>nShown?`<button type="button" data-n="more">더 보기 (${notices.length-nShown})</button>`:""}<button type="button" data-n="new">입력</button></div>`;
 }
-function nGoList(){ nView="list"; nCur=null; nEditing=null; nNew=[]; nRemove=new Set(); renderNotice(); loadNotices(); }
+function nGoList(){ nView="list"; nCur=null; nEditing=null; renderNotice(); loadNotices(); }
 async function nOpenDetail(id,count=true){
-  try{ const d=await api("GET","/api/notices/"+encodeURIComponent(id)+(count?"":"?count=0")); nCur=d.notice; nView="detail"; renderNotice(); $("#noticePanel").scrollIntoView({block:"nearest"}); }
+  try{ const d=await api("GET","/api/notices/"+encodeURIComponent(id)+(count?"":"?count=0")); nCur=d.notice; nView="detail"; renderNotice(); }
   catch(err){ flash("게시글을 불러오지 못했습니다: "+err.message,true); nGoList(); }
 }
-function nStartForm(edit){ nEditing=edit; nPinned=edit?!!nCur.pinned:false; nNew=[]; nRemove=new Set(); nView="form"; renderNotice(); $("#nTitle").focus(); }
-const readB64=f=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(",")[1]||""); fr.onerror=()=>rej(new Error(f.name+" 파일을 읽지 못했습니다.")); fr.readAsDataURL(f); });
-async function nUpload(id,f){
-  const b64=await readB64(f), chunks=[]; for(let i=0;i<b64.length;i+=CHUNK) chunks.push(b64.slice(i,i+CHUNK));
-  if(!chunks.length) chunks.push("");
-  await api("POST",`/api/notices/${encodeURIComponent(id)}/files`,{name:f.name,type:f.type,size:f.size,chunks});
-}
-async function nDownload(fid){
-  const d=await api("GET","/api/notice-files/"+encodeURIComponent(fid));
-  const parts=d.chunks.map(c=>{ const bin=atob(c), u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; });
-  const url=URL.createObjectURL(new Blob(parts,{type:"application/octet-stream"})), a=document.createElement("a");
-  a.href=url; a.download=d.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000);
-}
+function nStartForm(edit){ nEditing=edit; nPinned=edit?!!nCur.pinned:false; nView="form"; renderNotice(); $("#nTitle").focus(); }
 document.addEventListener("submit", async e=>{
   if(e.target.id!=="noticeForm") return;
   e.preventDefault();
   const m=$("#nMsg"), btn=$("#nSave"), fail=t=>{ m.className="msg err"; m.textContent=t; };
   const title=$("#nTitle").value.trim(); if(!title) return fail("제목을 입력하세요.");
-  const keep=nEditing?(nCur.files||[]).filter(f=>!nRemove.has(f.id)).length:0;
-  if(keep+nNew.length>MAX_FILES) return fail(`첨부파일은 ${MAX_FILES}개까지 올릴 수 있습니다.`);
-  const big=nNew.find(f=>f.size>MAX_FILE); if(big) return fail(`${big.name}: 파일당 ${MAX_FILE/1048576}MB 이하만 올릴 수 있습니다.`);
   btn.disabled=true; m.className="msg"; m.textContent="저장 중…";
   const author=$("#nAuthor").value.trim(); if(author) store.set("mh_author",author);
   const body={title,author,content:$("#nContent").value,pinned:nPinned};
-  let id=nEditing?nCur.id:null;
   try{
-    if(nEditing){ await api("PUT","/api/notices/"+encodeURIComponent(id),body); for(const fid of nRemove) await api("DELETE","/api/notice-files/"+encodeURIComponent(fid)); }
-    else id=(await api("POST","/api/notices",body)).id;
-  }catch(err){ btn.disabled=false; return fail("저장하지 못했습니다: "+err.message); }
-  try{ for(let i=0;i<nNew.length;i++){ m.textContent=`첨부파일 올리는 중 (${i+1}/${nNew.length})…`; await nUpload(id,nNew[i]); } }
-  catch(err){ nNew=[]; nEditing=true; await nOpenDetail(id,false); flash("게시글은 저장했지만 첨부파일을 올리지 못했습니다: "+err.message+" 「수정」에서 다시 첨부하세요.",true); return; }
-  nNew=[]; nRemove=new Set(); nEditing=null; await nOpenDetail(id,false); loadNotices();
-});
-document.addEventListener("change", e=>{
-  if(e.target.id==="nFiles"){ nNew=[...e.target.files]; $("#nPicked").textContent=nNew.map(f=>f.name+" ("+fsize(f.size)+")").join(", "); }
-  else if(e.target.matches("[data-nrm]")){ const id=e.target.dataset.nrm; e.target.checked?nRemove.add(id):nRemove.delete(id); const sp=e.target.closest(".fl").querySelector("span"); sp.style.textDecoration=e.target.checked?"line-through":""; }
+    let id=nEditing?nCur.id:null;
+    if(nEditing) await api("PUT","/api/notices/"+encodeURIComponent(id),body); else id=(await api("POST","/api/notices",body)).id;
+    nEditing=null; await nOpenDetail(id,false); loadNotices();
+  }catch(err){ btn.disabled=false; fail("저장하지 못했습니다: "+err.message); }
 });
 document.addEventListener("click", e=>{
   const op=e.target.closest("[data-nopen]"); if(op){ nOpenDetail(op.dataset.nopen); return; }
-  const fl=e.target.closest("[data-nfile]"); if(fl){ fl.disabled=true; nDownload(fl.dataset.nfile).catch(err=>flash("내려받지 못했습니다: "+err.message,true)).finally(()=>{ fl.disabled=false; }); return; }
   const b=e.target.closest("[data-n]"); if(!b) return;
   const a=b.dataset.n;
   if(a==="list") nGoList();
@@ -369,7 +334,7 @@ document.addEventListener("click", e=>{
   else if(a==="edit") nStartForm(true);
   else if(a==="more"){ nShown+=10; renderNotice(); }
   else if(a==="pin"){ nPinned=!nPinned; b.setAttribute("aria-pressed",String(nPinned)); }
-  else if(a==="del") confirmThen(b, async()=>{ try{ await api("DELETE","/api/notices/"+encodeURIComponent(nCur.id)); nGoList(); }catch(err){ flash("삭제하지 못했습니다: "+err.message,true); } }, "삭제 확인 (첨부파일도 삭제)");
+  else if(a==="del") confirmThen(b, async()=>{ try{ await api("DELETE","/api/notices/"+encodeURIComponent(nCur.id)); nGoList(); }catch(err){ flash("삭제하지 못했습니다: "+err.message,true); } }, "삭제 확인");
 });
 $("#noticeToggle").addEventListener("click", ()=>{ nOpen=!nOpen; store.set("mh_notice_open", nOpen?"1":"0"); renderNotice(); });
 renderNotice(); loadNotices();

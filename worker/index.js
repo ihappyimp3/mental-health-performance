@@ -164,7 +164,7 @@ async function api(request, env, url) {
   // 공지사항
   if (parts[0] === "notices") {
     if (parts.length === 1 && m === "GET") {
-      const rs = await db.prepare("SELECT n.id,n.title,n.author,n.pinned,n.views,n.created_at,n.updated_at,(SELECT COUNT(*) FROM notice_files f WHERE f.notice_id=n.id) AS files FROM notices n ORDER BY n.pinned DESC, n.created_at DESC LIMIT 300").all();
+      const rs = await db.prepare("SELECT n.id,n.title,n.author,n.pinned,n.views,n.created_at,n.updated_at FROM notices n ORDER BY n.pinned DESC, n.created_at DESC LIMIT 300").all();
       return json({ notices: rs.results.map(noticeOut) });
     }
     if (parts.length === 1 && m === "POST") {
@@ -178,8 +178,7 @@ async function api(request, env, url) {
       if (url.searchParams.get("count") !== "0") await db.prepare("UPDATE notices SET views=views+1 WHERE id=?").bind(parts[1]).run();
       const row = await db.prepare("SELECT * FROM notices WHERE id=?").bind(parts[1]).first();
       if (!row) return json({ error: "게시글을 찾을 수 없습니다." }, 404);
-      const fs = await db.prepare("SELECT id,name,type,size FROM notice_files WHERE notice_id=? ORDER BY created_at, name").bind(parts[1]).all();
-      return json({ notice: { ...noticeOut(row), content: row.content, files: fs.results } });
+      return json({ notice: { ...noticeOut(row), content: row.content } });
     }
     if (parts.length === 2 && m === "PUT") {
       const n = cleanNotice(await body(request));
@@ -192,36 +191,6 @@ async function api(request, env, url) {
       const stmts = fids.map((f) => db.prepare("DELETE FROM notice_chunks WHERE file_id=?").bind(f));
       stmts.push(db.prepare("DELETE FROM notice_files WHERE notice_id=?").bind(parts[1]), db.prepare("DELETE FROM notices WHERE id=?").bind(parts[1]));
       await db.batch(stmts);
-      return json({ ok: true });
-    }
-    // POST /api/notices/:id/files { name, type, size, chunks:[base64...] }
-    if (parts.length === 3 && parts[2] === "files" && m === "POST") {
-      const nid = parts[1];
-      if (!(await db.prepare("SELECT id FROM notices WHERE id=?").bind(nid).first())) return json({ error: "게시글을 찾을 수 없습니다." }, 404);
-      const b = await body(request);
-      const name = str(b.name, 150).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_"), size = Number(b.size);
-      const chunkList = Array.isArray(b.chunks) ? b.chunks : [];
-      if (!name) return json({ error: "파일 이름이 없습니다." }, 400);
-      if (!Number.isFinite(size) || size < 0 || size > MAX_FILE) return json({ error: `첨부파일은 파일당 ${MAX_FILE / 1048576}MB까지 올릴 수 있습니다.` }, 400);
-      if (!chunkList.length || chunkList.length > 12 || chunkList.some((c) => typeof c !== "string" || c.length > 600000)) return json({ error: "파일 데이터가 올바르지 않습니다." }, 400);
-      if ((await db.prepare("SELECT COUNT(*) AS n FROM notice_files WHERE notice_id=?").bind(nid).first()).n >= MAX_FILES) return json({ error: `첨부파일은 게시글당 ${MAX_FILES}개까지 올릴 수 있습니다.` }, 400);
-      const fid = crypto.randomUUID();
-      await db.batch([
-        db.prepare("INSERT INTO notice_files (id,notice_id,name,type,size,created_at) VALUES (?,?,?,?,?,?)").bind(fid, nid, name, str(b.type, 100), Math.round(size), now()),
-        ...chunkList.map((c, i) => db.prepare("INSERT INTO notice_chunks (file_id,idx,data) VALUES (?,?,?)").bind(fid, i, c)),
-      ]);
-      return json({ id: fid }, 201);
-    }
-  }
-  if (parts[0] === "notice-files" && parts.length === 2) {
-    if (m === "GET") {
-      const f = await db.prepare("SELECT id,name,type,size FROM notice_files WHERE id=?").bind(parts[1]).first();
-      if (!f) return json({ error: "파일을 찾을 수 없습니다." }, 404);
-      const cs = await db.prepare("SELECT data FROM notice_chunks WHERE file_id=? ORDER BY idx").bind(parts[1]).all();
-      return json({ ...f, chunks: cs.results.map((c) => c.data) });
-    }
-    if (m === "DELETE") {
-      await db.batch([db.prepare("DELETE FROM notice_chunks WHERE file_id=?").bind(parts[1]), db.prepare("DELETE FROM notice_files WHERE id=?").bind(parts[1])]);
       return json({ ok: true });
     }
   }
@@ -389,13 +358,12 @@ async function api(request, env, url) {
 }
 
 /* ---------------- helpers ---------------- */
-const MAX_FILE = 3 * 1048576, MAX_FILES = 5;
 function cleanNotice(b) {
   const title = str(b.title, 100);
   if (!title) return { error: "제목을 입력하세요." };
   return { title, author: str(b.author, 30), content: String(b.content ?? "").trim().slice(0, 5000), pinned: b.pinned ? 1 : 0 };
 }
-const noticeOut = (n) => ({ id: n.id, title: n.title, author: n.author, pinned: !!n.pinned, views: n.views, createdAt: n.created_at, updatedAt: n.updated_at, files: n.files ?? undefined });
+const noticeOut = (n) => ({ id: n.id, title: n.title, author: n.author, pinned: !!n.pinned, views: n.views, createdAt: n.created_at, updatedAt: n.updated_at });
 const TEAMS = ["통정팀", "자살팀"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/, TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 function cleanEvent(b) {
