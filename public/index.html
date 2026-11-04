@@ -129,6 +129,16 @@
         <button class="primary" type="submit" id="pSubmit">지표 추가</button>
       </div>
     </form>
+    <form id="yearCopyForm" autocomplete="off" style="display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="eyebrow">연도 복사</div>
+      <p class="hint" style="margin:0" id="ycHint"></p>
+      <div class="field-row">
+        <div class="field"><label for="ycYear">복사할 연도</label><select id="ycYear"></select></div>
+        <div class="field"><label for="ycScope">범위</label><select id="ycScope"></select></div>
+      </div>
+      <div class="msg" id="ycMsg" role="status"></div>
+      <div style="display:flex;justify-content:flex-end"><button class="primary" type="submit" id="ycBtn">지표 복사</button></div>
+    </form>
     <div id="planListWrap"></div>
     <div class="copybar inset" hidden></div>
   </div>

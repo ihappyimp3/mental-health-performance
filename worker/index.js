@@ -200,18 +200,19 @@ async function api(request, env, url) {
     return json({ ok: true });
   }
 
-  // POST /api/plans/copy  { ids:[], doc, withRecords }
+  // POST /api/plans/copy  { ids:[], doc | keepDoc, year?, withRecords }  (keepDoc: 각 지표를 원래 계획서 그대로 복사)
   if (parts[0] === "plans" && parts[1] === "copy" && m === "POST") {
     const b = await body(request);
-    const doc = String(b.doc || "");
-    if (!DOC_KEYS.includes(doc)) return json({ error: "붙여넣을 계획서가 올바르지 않습니다." }, 400);
-    const ids = Array.isArray(b.ids) ? b.ids.slice(0, 200).map(String) : [];
+    const keep = !!b.keepDoc, target = String(b.doc || "");
+    if (!keep && !DOC_KEYS.includes(target)) return json({ error: "붙여넣을 계획서가 올바르지 않습니다." }, 400);
+    const ids = Array.isArray(b.ids) ? b.ids.slice(0, 500).map(String) : [];
     if (!ids.length) return json({ error: "복사할 지표를 선택하세요." }, 400);
     let added = 0, records = 0; const skipped = [];
     for (const id of ids) {
       const src = await db.prepare("SELECT * FROM plans WHERE id=?").bind(id).first();
       if (!src) continue;
       const year = toYear(b.year) || src.year; // 붙여넣을 연도(없으면 원래 연도)
+      const doc = keep ? src.doc : target;
       const dup = await db.prepare("SELECT id FROM plans WHERE year=? AND doc=? AND lower(replace(name,' ',''))=lower(replace(?,' ',''))").bind(year, doc, src.name).first();
       if (dup) { skipped.push(src.name); continue; }
       const ord = (await db.prepare("SELECT COALESCE(MAX(ord),-1)+1 AS n FROM plans WHERE year=? AND doc=?").bind(year, doc).first()).n;

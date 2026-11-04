@@ -326,6 +326,34 @@ function openPlans(){ resetPlanForm(); renderPlanList(); dlg.showModal(); $("#pN
 $("#managePlans").addEventListener("click", openPlans);
 dlg.addEventListener("click", e=>{ if(e.target.matches("[data-close]")||e.target===dlg) dlg.close(); });
 dlg.addEventListener("close", ()=>{ closeAfterEdit=false; });
+/* 연도 복사: 보고 있는 연도의 지표를 다른 연도로 한꺼번에 복사 */
+let ycYearSel=null;
+function renderYearCopy(){
+  const all=allYearPlans(), scoped=scopedPlans();
+  const ys=[...new Set([2025,2026,2027,2028,2029,2030,...knownYears])].filter(y=>y!==year).sort();
+  if(ycYearSel===null || !ys.includes(ycYearSel)) ycYearSel = ys.includes(year+1) ? year+1 : ys[0];
+  $("#ycYear").innerHTML=ys.map(y=>`<option value="${y}"${y===ycYearSel?" selected":""}>${y}년</option>`).join("");
+  const opts=[`<option value="all">${year}년 전체 계획서 (${all.length}개)</option>`];
+  if(curDoc!=="all") opts.push(`<option value="cur">${esc(docName(curDoc))}만 (${scoped.length}개)</option>`);
+  const prev=$("#ycScope").value;
+  $("#ycScope").innerHTML=opts.join(""); if(prev==="cur"&&curDoc!=="all") $("#ycScope").value="cur";
+  $("#ycHint").textContent=`지금 보고 있는 ${year}년 지표를 다른 연도로 복사합니다. 계획서·산출내역·목표·단위·담당이 그대로 복사되고 순서도 유지됩니다. 날짜별 실적은 복사하지 않고, 이미 있는 지표는 건너뜁니다.`;
+  $("#ycBtn").disabled=!all.length;
+}
+$("#ycYear").addEventListener("change", e=>{ ycYearSel=+e.target.value; });
+$("#yearCopyForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const m=$("#ycMsg"), ty=+$("#ycYear").value, list=$("#ycScope").value==="cur"?scopedPlans():allYearPlans();
+  if(!list.length){ m.className="msg err"; m.textContent="복사할 지표가 없습니다."; return; }
+  const btn=$("#ycBtn"); btn.disabled=true; m.className="msg"; m.textContent="복사하는 중…";
+  try{
+    const r=await api("POST","/api/plans/copy",{ids:list.map(p=>p.id),keepDoc:true,year:ty,withRecords:false});
+    m.className="msg ok";
+    m.textContent=`${year}년 → ${ty}년: ${r.added}개 복사했습니다.${r.skipped.length?` 이미 있는 ${r.skipped.length}개는 건너뜀.`:""} 위쪽 연도를 ${ty}년으로 바꾸면 볼 수 있습니다.`;
+    await load();
+  }catch(err){ m.className="msg err"; m.textContent="복사하지 못했습니다: "+err.message; }
+  finally{ btn.disabled=false; }
+});
 function renderPlanList(){
   const all=allYearPlans(), w=$("#planListWrap");
   const groups = curDoc==="all" ? DOCS.map(d=>d.key) : [curDoc];
@@ -338,6 +366,7 @@ function renderPlanList(){
   const scope = curDoc==="all" ? `${year}년 전체 지표` : `${year}년 ${docName(curDoc)} 지표`;
   w.innerHTML = n ? `<div class="eyebrow">${esc(scope)} (${n})</div><div class="hint">▲▼로 순서를 바꾸고, 체크하면 다른 계획서에 붙여넣을 수 있습니다.</div><ul class="planlist">${html}</ul>` : `<div class="hint">${esc(scope)}가 아직 없습니다.</div>`;
   renderCopyBars();
+  renderYearCopy();
 }
 function resetPlanForm(){
   editingPlan=null; $("#planForm").reset();

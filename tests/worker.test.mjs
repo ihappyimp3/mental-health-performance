@@ -182,3 +182,20 @@ test("선택한 지표 삭제·한꺼번에 수정", async () => {
   assert.equal(data.records.length, 0); // 실적도 함께 삭제
   assert.equal((await post("/api/plans/delete", { ids: [] })).status, 400);
 });
+
+test("연도 전체 복사: 계획서 유지, 순서 유지, 실적 제외, 중복 건너뜀", async () => {
+  const env = { DB: makeD1(), ASSETS, APP_PASSCODE: PASS };
+  const cookie = await session(env);
+  const mk = async (doc, name) => (await (await call(env, "/api/plans", { method: "POST", body: { year: 2026, doc, name, calc: name + "산출", target: 7, unit: "건" }, cookie })).json()).id;
+  const a = await mk("main", "첫째"), b = await mk("main", "둘째"), c = await mk("health", "셋째");
+  await call(env, "/api/records", { method: "POST", body: { planIds: [a], date: "2026-01-05", value: 3 }, cookie });
+  const copy = (body) => call(env, "/api/plans/copy", { method: "POST", body, cookie }).then((r) => r.json());
+  const r = await copy({ ids: [a, b, c], keepDoc: true, year: 2027, withRecords: false });
+  assert.equal(r.added, 3);
+  const d = await (await call(env, "/api/data?year=2027", { cookie })).json();
+  assert.deepEqual(d.plans.map((p) => p.doc + ":" + p.name), ["health:셋째", "main:첫째", "main:둘째"]);
+  assert.equal(d.plans.find((p) => p.name === "첫째").calc, "첫째산출");
+  assert.equal(d.records.length, 0);
+  assert.deepEqual((await copy({ ids: [a, b, c], keepDoc: true, year: 2027 })).skipped.sort(), ["둘째", "셋째", "첫째"]);
+  assert.equal((await call(env, "/api/plans/copy", { method: "POST", body: { ids: [a], year: 2027 }, cookie })).status, 400);
+});
